@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 
 export type Role = 'student' | 'teacher' | 'admin';
-export type AdminDesignation = 'hod' | 'principal' | 'office_staff';
+export type AdminDesignation = 'hod' | 'principal' | 'office_staff' | 'pending_staff';
 export type Program = 'B.Tech CSE' | 'B.Tech CSE & AI' | 'BCA';
 
 export type Profile = {
@@ -10,7 +10,7 @@ export type Profile = {
   name: string;
   email: string;
   role: Role;
-  designation?: AdminDesignation;
+  designation?: AdminDesignation | null;
   program?: Program;
   batchId?: string; // mapped from batch_id
   reg?: string;
@@ -178,8 +178,8 @@ export async function createProfile(input: Partial<Profile>): Promise<Profile> {
 export async function updateProfile(profileId: string, data: Partial<Profile>): Promise<Profile | null> {
   const row: any = {};
   if (data.role) row.role = data.role;
-  if (data.designation) row.designation = data.designation;
-  if (data.batchId) row.batch_id = data.batchId;
+  if (data.designation !== undefined) row.designation = data.designation;
+  if (data.batchId !== undefined) row.batch_id = data.batchId;
   
   const { data: updated, error } = await supabase.from('profiles').update(row).eq('id', profileId).select().single();
   if (error || !updated) return null;

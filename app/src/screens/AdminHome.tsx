@@ -11,24 +11,7 @@ const DESIGNATION_LABELS: Record<string, string> = {
   office_staff: 'Office Staff',
 };
 
-const kpis = [
-  { label: 'Total Students', value: '240', color: colors.blue600, emoji: '🎓' },
-  { label: 'Total Teachers', value: '18', color: '#7C3AED', emoji: '👨‍🏫' },
-  { label: 'Avg Attendance', value: '82%', color: '#1B8F5A', emoji: '📊' },
-  { label: 'Pending Requests', value: '5', color: colors.coral, emoji: '📋' },
-];
-
-const programStats = [
-  { name: 'B.Tech CSE', attendance: 84, students: 120, color: '#1B8F5A' },
-  { name: 'B.Tech CSE & AI', attendance: 79, students: 60, color: '#C47D1A' },
-  { name: 'BCA', attendance: 81, students: 60, color: '#1B8F5A' },
-];
-
-const recentRequests = [
-  { id: 'r1', name: 'Dr. Rajesh Kumar', type: 'Teacher Leave', reason: 'Conference at IIT Bombay', role: 'teacher' },
-  { id: 'r2', name: 'Aravind R', type: 'Community', reason: 'Create Coding Club community', role: 'student' },
-  { id: 'r3', name: 'Lakshmi M', type: 'Medical Leave', reason: 'Fever, advised rest 2 days', role: 'student' },
-];
+// Removed hardcoded stats and requests
 
 export default function AdminHome() {
   const { profile, designation } = useAuth();
@@ -37,7 +20,37 @@ export default function AdminHome() {
   const isWide = width >= 768;
   const isDesktop = width >= 1024;
 
+  const [loading, setLoading] = React.useState(true);
+  const [stats, setStats] = React.useState({ students: 0, teachers: 0, requests: 0 });
+  const [requests, setRequests] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const { listProfiles, listRequests } = require('../lib/db');
+        const [students, teachers, reqs] = await Promise.all([
+          listProfiles({ role: 'student' }),
+          listProfiles({ role: 'teacher' }),
+          listRequests({ status: 'pending' })
+        ]);
+        setStats({ students: students.length, teachers: teachers.length, requests: reqs.length });
+        setRequests(reqs.slice(0, 3));
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
   const designationLabel = DESIGNATION_LABELS[designation ?? 'office_staff'] ?? 'Administrator';
+
+  const kpis = [
+    { label: 'Total Students', value: stats.students.toString(), color: colors.blue600, emoji: '🎓' },
+    { label: 'Total Teachers', value: stats.teachers.toString(), color: '#7C3AED', emoji: '👨‍🏫' },
+    { label: 'Avg Attendance', value: 'N/A', color: '#1B8F5A', emoji: '📊' }, // requires deeper integration
+    { label: 'Pending Requests', value: stats.requests.toString(), color: colors.coral, emoji: '📋' },
+  ];
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -67,20 +80,11 @@ export default function AdminHome() {
           ))}
         </View>
 
-        {/* Attendance by Program */}
+        {/* Attendance by Program - Disabled until session data is available */}
         <Text style={styles.sectionTitle}>Attendance by Program</Text>
-        {programStats.map((p, i) => (
-          <View key={i} style={styles.programCard}>
-            <View style={styles.programHeader}>
-              <Text style={styles.programName}>{p.name}</Text>
-              <Text style={[styles.programPct, { color: p.color }]}>{p.attendance}%</Text>
-            </View>
-            <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${p.attendance}%`, backgroundColor: p.color }]} />
-            </View>
-            <Text style={styles.programStudents}>{p.students} students</Text>
-          </View>
-        ))}
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>Attendance aggregates will appear once classes are logged.</Text>
+        </View>
 
         {/* Quick Actions */}
         <Text style={styles.sectionTitle}>Quick Actions</Text>
@@ -100,17 +104,23 @@ export default function AdminHome() {
 
         {/* Recent Requests */}
         <Text style={styles.sectionTitle}>Recent Requests</Text>
-        {recentRequests.map((r) => (
+        {loading ? (
+          <Text style={styles.emptyText}>Loading...</Text>
+        ) : requests.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>No pending requests.</Text>
+          </View>
+        ) : requests.map((r) => (
           <View key={r.id} style={styles.requestCard}>
-            <View style={[styles.requestAvatar, { backgroundColor: r.role === 'teacher' ? '#F0E6FF' : '#EBF2FB' }]}>
-              <Text style={{ fontSize: 16 }}>{r.role === 'teacher' ? '👨‍🏫' : '🎓'}</Text>
+            <View style={[styles.requestAvatar, { backgroundColor: '#EBF2FB' }]}>
+              <Text style={{ fontSize: 16 }}>📋</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.requestName}>{r.name}</Text>
-              <Text style={styles.requestReason}>{r.reason}</Text>
+              <Text style={styles.requestName}>{r.type}</Text>
+              <Text style={styles.requestReason}>{r.data?.reason ?? 'Pending approval'}</Text>
             </View>
             <View style={styles.pendingBadge}>
-              <Text style={styles.pendingText}>{r.type}</Text>
+              <Text style={styles.pendingText}>Pending</Text>
             </View>
           </View>
         ))}
@@ -238,4 +248,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   pendingText: { fontFamily: fonts.sansMedium, fontSize: 11, color: '#C47D1A' },
+  emptyCard: {
+    backgroundColor: '#fff', borderRadius: radius.md, borderWidth: hairline, borderColor: colors.border,
+    padding: spacing.xl, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md,
+  },
+  emptyText: { fontFamily: fonts.sans, fontSize: 14, color: colors.ink500, textAlign: 'center' },
 });

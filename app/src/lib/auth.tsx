@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import * as Linking from 'expo-linking';
 import { supabase } from './supabase';
 import { createProfile, getProfileByUserId, updateProfile, Profile, Role, AdminDesignation } from './db';
 
@@ -10,7 +11,6 @@ type AuthCtx = {
   loading: boolean;
   role: Role;
   designation?: AdminDesignation;
-  needsOnboarding: boolean;
   completeOnboarding: (role: Role, designation?: AdminDesignation) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
@@ -42,7 +42,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   const role: Role = profile?.role ?? 'student';
   const designation = profile?.designation;
@@ -55,7 +54,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!currentUser) {
         setUser(null);
         setProfile(null);
-        setNeedsOnboarding(false);
         setLoading(false);
         return;
       }
@@ -63,36 +61,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const u = { id: currentUser.id, name: currentUser.user_metadata?.name, email: currentUser.email! };
       setUser(u);
 
-      let p = await getProfileByUserId(u.id).catch(() => null);
+      let p = await getProfileByUserId(u.id).catch((err) => {
+        console.error('getProfile error:', err);
+        return null;
+      });
 
       if (!p) {
         // First sign-in
         const detected = detectRoleFromEmail(u.email);
-        if (detected === 'student') {
-          const local = u.email.toLowerCase().split('@')[0].toUpperCase();
-          p = await createProfile({
-            id: u.id, name: u.name || 'Student', email: u.email,
-            role: 'student', reg: local, dept: 'CSE',
-          }).catch(() => null);
-          setNeedsOnboarding(false);
-        } else {
-          p = await createProfile({
-            id: u.id, name: u.name || 'Staff', email: u.email,
-            role: 'student', // temporary until onboarding
-          }).catch(() => null);
-          setNeedsOnboarding(true);
+        try {
+          if (detected === 'student') {
+            const local = u.email.toLowerCase().split('@')[0].toUpperCase();
+            p = await createProfile({
+              id: u.id, name: u.name || 'Student', email: u.email,
+              role: 'student', reg: local, dept: 'CSE',
+            });
+          } else {
+            p = await createProfile({
+              id: u.id, name: u.name || 'Staff', email: u.email,
+              role: 'student', designation: 'pending_staff'
+            });
+          }
+        } catch (createErr: any) {
+          console.error('Profile creation failed:', createErr);
+          import('react-native').then(({ Alert }) => {
+            Alert.alert('Profile Setup Failed', 'We logged you in, but failed to create your profile. Ensure you ran the Supabase schema correctly. Error: ' + createErr.message);
+          });
+          // Do not set user to avoid getting stuck in a redirect loop
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+          return;
         }
       } else if (!isStudentEmail(u.email) && p.role === 'student' && !p.designation) {
-        setNeedsOnboarding(true);
-      } else {
-        setNeedsOnboarding(false);
+        // Fix for older test staff accounts created before the pending feature
+        const updated = await updateProfile(p.id, { designation: 'pending_staff' }).catch(() => null);
+        if (updated) p = updated;
       }
 
       setProfile(p);
     } catch (e) {
       setUser(null);
       setProfile(null);
-      setNeedsOnboarding(false);
     } finally {
       setLoading(false);
     }
@@ -112,26 +122,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (newDesignation) data.designation = newDesignation;
     const updated = await updateProfile(profile.id, data).catch(() => null);
     if (updated) setProfile(updated);
-    setNeedsOnboarding(false);
   };
 
   const signIn = async (email: string, password: string) => {
-    // Demo bypass since db might be empty
-    if (email === 'demo@cekottarakkara.ac.in' || email.startsWith('teacher') || email.startsWith('admin')) {
-        const id = 'demo_' + Date.now();
-        setUser({ id, name: email.split('@')[0], email });
-        if (email.startsWith('teacher2')) {
-          setProfile({ id, name: 'Prof. Smith', email, role: 'teacher', is_class_advisor: false } as Profile);
-        } else if (email.startsWith('teacher')) {
-          setProfile({ id, name: 'Dr. Rajesh', email, role: 'teacher', is_class_advisor: true, advisor_batch_id: 'b1' } as Profile);
-        } else if (email.startsWith('admin')) {
-          setProfile({ id, name: 'Admin HOD', email, role: 'admin', designation: 'hod' } as Profile);
-        } else {
-          setProfile({ id, name: 'Student', email, role: 'student', reg: 'CEK22CS099', dept: 'CSE', program: 'B.Tech CSE', semester: 6, batch_id: 'b1' } as Profile);
-        }
-        setNeedsOnboarding(false);
-        return;
-    }
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
@@ -141,7 +134,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name } }
+      options: { 
+        data: { name },
+        emailRedirectTo: Linking.createURL('/(auth)/login')
+      }
     });
     if (error) throw error;
   };
@@ -150,13 +146,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
-    setNeedsOnboarding(false);
   };
 
   return (
     <Ctx.Provider value={{
       user, profile, loading, role, designation,
-      needsOnboarding, completeOnboarding,
+      completeOnboarding,
       signIn, signUp, signOut, refresh,
     }}>
       {children}

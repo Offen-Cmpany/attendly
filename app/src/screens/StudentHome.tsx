@@ -31,8 +31,8 @@ export default function StudentHome() {
     }
   }, [user?.id]);
 
-  // Mock attendance fluctuates based on semester selection for demo
-  const attendance = semester === 6 ? 84 : semester === 5 ? 78 : 91;
+  // Attendance fetching will be added in a future backend PR
+  const attendance = 0;
 
   // Group marks by course for the table
   const groupedMarks = marks.reduce((acc, m) => {
@@ -40,12 +40,6 @@ export default function StudentHome() {
     acc[m.courseId].push(m);
     return acc;
   }, {} as Record<string, ExamMark[]>);
-
-  // Mock course names based on IDs
-  const courseNames: Record<string, string> = {
-    'c1': 'Data Structures',
-    'c2': 'Operating Systems',
-  };
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.surfaceAlt }} contentContainerStyle={{ paddingTop: insets.top + space.lg, paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: space.lg }}>
@@ -72,15 +66,15 @@ export default function StudentHome() {
       <Card>
         <Text style={styles.heroLabel}>Overall attendance (Semester {semester})</Text>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.sm, marginTop: space.xs }}>
-          <Text style={styles.heroValue}>{attendance}</Text>
+          <Text style={styles.heroValue}>—</Text>
           <Text style={styles.heroUnit}>%</Text>
           <View style={{ flex: 1 }} />
-          <Chip label={attendance >= 80 ? "Safe" : attendance >= 75 ? "Watch" : "Risk"} variant={attendance >= 80 ? "safe" : attendance >= 75 ? "warn" : "risk"} dot />
+          <Chip label="No Data" variant="neutral" dot />
         </View>
         <View style={{ height: space.md }} />
-        <Progress value={attendance} color={attendance >= 80 ? colors.blue600 : attendance >= 75 ? '#E2A53A' : colors.coral400} />
+        <Progress value={0} color={colors.ink300} />
         <Text style={styles.heroFootnote}>
-          {attendance >= 75 ? `You can skip ${Math.floor((attendance - 75) / 2)} more classes before crossing 75%.` : 'You are below the required attendance threshold.'}
+          Attendance data will be populated once classes begin.
         </Text>
       </Card>
 
@@ -106,7 +100,7 @@ export default function StudentHome() {
                 <View key={courseId}>
                   <View style={styles.tableRow}>
                     <View style={{ flex: 2 }}>
-                      <Text style={styles.cellName}>{courseNames[courseId] || 'Subject'}</Text>
+                      <Text style={styles.cellName}>{courseId}</Text>
                     </View>
                     {Array.from({ length: totalExams }).map((_, i) => {
                       const mk = cMarks.find(m => m.seriesNumber === i + 1);
@@ -124,23 +118,8 @@ export default function StudentHome() {
       <View>
         <Eyebrow>Today's classes</Eyebrow>
         <View style={{ height: space.sm }} />
-        <Card style={{ gap: space.md }}>
-          {[
-            { time: '09:00', title: 'Data Structures', room: 'CS-204', status: 'present' as const },
-            { time: '11:00', title: 'Linear Algebra', room: 'M-110', status: 'upcoming' as const },
-            { time: '14:00', title: 'Operating Systems Lab', room: 'CS-Lab 3', status: 'upcoming' as const },
-          ].map((c, i) => (
-            <Link key={i} href={{ pathname: '/subject/[id]', params: { id: c.title } }} asChild>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
-                <Text style={styles.time}>{c.time}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.classTitle}>{c.title}</Text>
-                  <Text style={styles.classRoom}>{c.room}</Text>
-                </View>
-                <Chip label={c.status === 'present' ? 'Present' : 'Upcoming'} variant={c.status === 'present' ? 'safe' : 'neutral'} dot />
-              </View>
-            </Link>
-          ))}
+        <Card style={{ padding: space.xl, alignItems: 'center' }}>
+          <Text style={{ fontFamily: fonts.sans, fontSize: 14, color: colors.ink500 }}>No classes scheduled for today.</Text>
         </Card>
       </View>
 

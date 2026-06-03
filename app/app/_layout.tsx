@@ -8,10 +8,12 @@ import { useFonts, Inter_400Regular, Inter_500Medium } from '@expo-google-fonts/
 import { Manjari_400Regular, Manjari_700Bold } from '@expo-google-fonts/manjari';
 import { JetBrainsMono_400Regular, JetBrainsMono_500Medium } from '@expo-google-fonts/jetbrains-mono';
 import { AuthProvider, useAuth } from '../src/lib/auth';
+import { supabase } from '../src/lib/supabase';
 import { colors } from '../src/theme';
+import * as Linking from 'expo-linking';
 
 function Gate() {
-  const { user, loading, needsOnboarding } = useAuth();
+  const { user, profile, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const [minSplashDone, setMinSplashDone] = React.useState(false);
@@ -23,18 +25,50 @@ function Gate() {
   }, []);
 
   useEffect(() => {
+    const handleUrl = async (url: string | null) => {
+      if (!url) return;
+      
+      // Implicit flow: access_token in hash
+      if (url.includes('#access_token=')) {
+        const hash = url.split('#')[1];
+        const params = new URLSearchParams(hash);
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+        if (access_token && refresh_token) {
+          await supabase.auth.setSession({ access_token, refresh_token });
+        }
+      }
+      
+      // PKCE flow: code in query params
+      if (url.includes('?code=') || url.includes('&code=')) {
+        const query = url.split('?')[1]?.split('#')[0];
+        const params = new URLSearchParams(query);
+        const code = params.get('code');
+        if (code) {
+          await supabase.auth.exchangeCodeForSession(code);
+        }
+      }
+    };
+
+    Linking.getInitialURL().then(handleUrl);
+    const sub = Linking.addEventListener('url', (e) => handleUrl(e.url));
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
     if (loading || !minSplashDone) return;
     const inAuth = segments[0] === '(auth)';
-    const inOnboarding = segments[0] === 'onboarding';
+    const isPending = profile?.designation === 'pending_staff';
+    const inPendingScreen = segments[0] === 'pending';
 
     if (!user && !inAuth) {
       router.replace('/(auth)/login');
-    } else if (user && needsOnboarding && !inOnboarding) {
-      router.replace('/onboarding');
-    } else if (user && !needsOnboarding && (inAuth || inOnboarding)) {
+    } else if (user && isPending && !inPendingScreen) {
+      router.replace('/pending');
+    } else if (user && !isPending && (inAuth || inPendingScreen)) {
       router.replace('/(tabs)');
     }
-  }, [user, loading, needsOnboarding, segments, minSplashDone]);
+  }, [user, profile, loading, segments, minSplashDone]);
 
   if (loading || !minSplashDone) {
     return (
