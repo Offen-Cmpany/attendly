@@ -245,71 +245,348 @@ export async function listMarks(filter?: { studentId?: string; courseId?: string
   return (data || []).map(mapExamMark);
 }
 
-// ─── Events ──────────────────────────────────────────────────────
-export async function listEvents(filter?: { communityId?: string }): Promise<EventDoc[]> {
-  let query = supabase.from('events').select('*').order('event_date', { ascending: false }).limit(50);
-  if (filter?.communityId) query = query.eq('community_id', filter.communityId);
-  const { data } = await query;
-  return (data || []).map(row => ({
+export async function saveMarks(
+  batchId: string,
+  courseId: string,
+  seriesNumber: number,
+  maxMarks: number,
+  entries: { studentId: string; marksObtained: number }[]
+): Promise<void> {
+  const rows = entries.map(e => ({
+    student_id: e.studentId,
+    course_id: courseId,
+    batch_id: batchId,
+    series_number: seriesNumber,
+    marks_obtained: e.marksObtained,
+    max_marks: maxMarks
+  }));
+
+  const { error } = await supabase.from('marks').upsert(rows, { onConflict: 'student_id,course_id,series_number' });
+  if (error) throw new Error(error.message || 'Failed to save marks');
+}
+
+// ─── Course Durations (MVP Core) ─────────────────────────────────
+export type CourseDuration = {
+  id: string;
+  courseCode: string;
+  courseName: string;
+  facultyId: string;
+  batchId: string;
+  semester: string;
+  program?: string; // from joined batches
+  facultyName?: string; // from joined profiles
+  batchName?: string; // from joined batches
+};
+
+function mapCourseDuration(row: any): CourseDuration {
+  return {
     id: row.id,
-    communityId: row.community_id,
-    title: row.title,
-    description: row.description,
-    type: row.type,
-    date: row.event_date,
-    location: row.location,
-    isDutyLeaveEligible: row.is_duty_leave_eligible,
-    organizerId: row.organizer_id,
+    courseCode: row.course_code,
+    courseName: row.course_name,
+    facultyId: row.faculty_id,
+    batchId: row.batch_id,
+    semester: row.semester,
+    program: row.batches?.program,
+    facultyName: row.profiles?.name,
+    batchName: row.batches ? `${row.batches.program} ${row.batches.year} ${row.batches.section || ''}`.trim() : undefined,
+  };
+}
+
+export async function listCourseDurations(filter?: { facultyId?: string }): Promise<CourseDuration[]> {
+  let query = supabase.from('course_durations').select('*, profiles(name), batches(name, program, year, section)').limit(100);
+  if (filter?.facultyId) query = query.eq('faculty_id', filter.facultyId);
+  const { data, error } = await query;
+  if (error) { console.error('listCourseDurations error:', error); return []; }
+  return (data || []).map(mapCourseDuration);
+}
+
+export async function getCourseDuration(id: string): Promise<CourseDuration | null> {
+  const { data, error } = await supabase.from('course_durations').select('*, profiles(name), batches(name, program, year, section)').eq('id', id).single();
+  if (error || !data) return null;
+  return mapCourseDuration(data);
+}
+
+export async function createCourseDuration(input: Omit<CourseDuration, 'id' | 'facultyName' | 'batchName'>): Promise<CourseDuration> {
+  const { data, error } = await supabase.from('course_durations').insert({
+    course_code: input.courseCode,
+    course_name: input.courseName,
+    faculty_id: input.facultyId,
+    batch_id: input.batchId,
+    semester: input.semester,
+  }).select('*, profiles(name), batches(name, program, year, section)').single();
+  if (error) throw error;
+  return mapCourseDuration(data);
+}
+
+export async function deleteCourseDuration(id: string): Promise<void> {
+  const { error } = await supabase.from('course_durations').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ─── Attendance Records (MVP Core) ───────────────────────────────
+export type AttendanceRecord = {
+  id: string;
+  courseDurationId: string;
+  sessionDate: string;
+  markedBy: string;
+  topic?: string;
+  deliveryMethod?: string;
+  lockedAt?: string;
+  // joined fields (optional)
+  courseCode?: string;
+  courseName?: string;
+  batchName?: string;
+  presentCount?: number;
+  absentCount?: number;
+};
+
+function mapAttendanceRecord(row: any): AttendanceRecord {
+  return {
+    id: row.id,
+    courseDurationId: row.course_duration_id,
+    sessionDate: row.session_date,
+    markedBy: row.marked_by,
+    topic: row.topic,
+    deliveryMethod: row.delivery_method,
+    lockedAt: row.locked_at,
+    courseCode: row.course_durations?.course_code,
+    courseName: row.course_durations?.course_name,
+    batchName: row.batch_name,
+  };
+}
+
+export type AttendanceEntry = {
+  id: string;
+  attendanceRecordId: string;
+  studentId: string;
+  status: 'present' | 'absent';
+};
+
+/** Fetch students enrolled in a batch (for the marking screen) */
+export async function listStudentsByBatch(batchId: string): Promise<Profile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('role', 'student')
+    .eq('batch_id', batchId)
+    .order('name', { ascending: true })
+    .limit(200);
+  if (error) { console.error('listStudentsByBatch error:', error); return []; }
+  return (data || []).map(mapProfile);
+}
+
+/**
+ * Save an attendance session atomically.
+ * Creates the attendance_record, then bulk-inserts attendance_entries.
+ */
+export async function saveAttendanceSession(
+  courseDurationId: string,
+  markedBy: string,
+  entries: { studentId: string; status: 'present' | 'absent' }[],
+  options?: { topic?: string; deliveryMethod?: string }
+): Promise<AttendanceRecord> {
+  // 1. Create the attendance record
+  const { data: record, error: recErr } = await supabase
+    .from('attendance_records')
+    .insert({
+      course_duration_id: courseDurationId,
+      marked_by: markedBy,
+      topic: options?.topic || null,
+      delivery_method: options?.deliveryMethod || null,
+    })
+    .select()
+    .single();
+
+  if (recErr || !record) {
+    throw new Error(recErr?.message || 'Failed to create attendance record');
+  }
+
+  // 2. Bulk-insert attendance entries
+  const rows = entries.map(e => ({
+    attendance_record_id: record.id,
+    student_id: e.studentId,
+    status: e.status,
+  }));
+
+  const { error: entryErr } = await supabase.from('attendance_entries').insert(rows);
+  if (entryErr) {
+    throw new Error(entryErr.message || 'Failed to save attendance entries');
+  }
+
+  return mapAttendanceRecord(record);
+}
+
+/** Fetch recent attendance records for a faculty member */
+export async function listAttendanceRecords(filter?: {
+  facultyId?: string;
+  courseDurationId?: string;
+  limit?: number;
+}): Promise<AttendanceRecord[]> {
+  let query = supabase
+    .from('attendance_records')
+    .select('*, course_durations(course_code, course_name)')
+    .order('session_date', { ascending: false })
+    .limit(filter?.limit || 20);
+
+  if (filter?.facultyId) query = query.eq('marked_by', filter.facultyId);
+  if (filter?.courseDurationId) query = query.eq('course_duration_id', filter.courseDurationId);
+
+  const { data, error } = await query;
+  if (error) { console.error('listAttendanceRecords error:', error); return []; }
+  return (data || []).map(mapAttendanceRecord);
+}
+
+/** Get attendance summary for a student: % per course_duration */
+export type AttendanceSummary = {
+  courseDurationId: string;
+  courseCode: string;
+  courseName: string;
+  totalSessions: number;
+  presentCount: number;
+  percentage: number;
+};
+
+export async function getStudentAttendanceSummary(studentId: string): Promise<AttendanceSummary[]> {
+  // Get all entries for this student
+  const { data: entries, error } = await supabase
+    .from('attendance_entries')
+    .select('status, attendance_records(id, course_duration_id, course_durations(course_code, course_name))')
+    .eq('student_id', studentId);
+
+  if (error || !entries) return [];
+
+  // Aggregate by course_duration
+  const map = new Map<string, { code: string; name: string; total: number; present: number }>();
+
+  for (const entry of entries) {
+    const rec = (entry as any).attendance_records;
+    if (!rec) continue;
+    const cd = rec.course_durations;
+    const cdId = rec.course_duration_id;
+    if (!cdId) continue;
+
+    if (!map.has(cdId)) {
+      map.set(cdId, {
+        code: cd?.course_code || '',
+        name: cd?.course_name || '',
+        total: 0,
+        present: 0,
+      });
+    }
+    const agg = map.get(cdId)!;
+    agg.total++;
+    if (entry.status === 'present') agg.present++;
+  }
+
+  return Array.from(map.entries()).map(([cdId, agg]) => ({
+    courseDurationId: cdId,
+    courseCode: agg.code,
+    courseName: agg.name,
+    totalSessions: agg.total,
+    presentCount: agg.present,
+    percentage: agg.total > 0 ? Math.round((agg.present / agg.total) * 100) : 0,
   }));
 }
 
-// ─── Communities ─────────────────────────────────────────────────
-export async function listCommunities(): Promise<Community[]> {
-  const { data } = await supabase.from('communities').select('*').limit(50);
-  return (data || []).map(row => ({
-    id: row.id,
-    name: row.name,
-    description: row.description,
-    category: row.category,
-    createdBy: row.created_by,
+/** Get session-by-session detail for a student in a specific course_duration */
+export async function getStudentAttendanceDetail(
+  studentId: string,
+  courseDurationId: string
+): Promise<{ date: string; topic?: string; status: string }[]> {
+  const { data, error } = await supabase
+    .from('attendance_entries')
+    .select('status, attendance_records(session_date, topic, course_duration_id)')
+    .eq('student_id', studentId);
+
+  if (error || !data) return [];
+
+  return data
+    .filter((e: any) => e.attendance_records?.course_duration_id === courseDurationId)
+    .map((e: any) => ({
+      date: e.attendance_records.session_date,
+      topic: e.attendance_records.topic,
+      status: e.status,
+    }))
+    .sort((a: any, b: any) => b.date.localeCompare(a.date));
+}
+
+/** Department-wide attendance summary for HoD */
+export type DeptAttendanceSummary = {
+  courseDurationId: string;
+  courseCode: string;
+  courseName: string;
+  facultyName: string;
+  totalSessions: number;
+  avgAttendance: number;
+};
+
+export async function getDepartmentAttendanceSummary(): Promise<DeptAttendanceSummary[]> {
+  const { data: records, error } = await supabase
+    .from('attendance_records')
+    .select('id, course_duration_id, course_durations(course_code, course_name, faculty_id)');
+
+  if (error || !records) return [];
+
+  // Get all entries
+  const { data: entries } = await supabase
+    .from('attendance_entries')
+    .select('attendance_record_id, status');
+
+  if (!entries) return [];
+
+  // Build entry counts per record
+  const entryCounts = new Map<string, { total: number; present: number }>();
+  for (const e of entries) {
+    if (!entryCounts.has(e.attendance_record_id)) {
+      entryCounts.set(e.attendance_record_id, { total: 0, present: 0 });
+    }
+    const c = entryCounts.get(e.attendance_record_id)!;
+    c.total++;
+    if (e.status === 'present') c.present++;
+  }
+
+  // Aggregate per course_duration
+  const cdMap = new Map<string, { code: string; name: string; facultyId: string; sessions: number; totalPct: number }>();
+
+  for (const rec of records) {
+    const cd = (rec as any).course_durations;
+    const cdId = rec.course_duration_id;
+    if (!cdId || !cd) continue;
+
+    if (!cdMap.has(cdId)) {
+      cdMap.set(cdId, { code: cd.course_code, name: cd.course_name, facultyId: cd.faculty_id, sessions: 0, totalPct: 0 });
+    }
+    const agg = cdMap.get(cdId)!;
+    agg.sessions++;
+    const counts = entryCounts.get(rec.id);
+    if (counts && counts.total > 0) {
+      agg.totalPct += (counts.present / counts.total) * 100;
+    }
+  }
+
+  // Get faculty names
+  const facultyIds = [...new Set(Array.from(cdMap.values()).map(v => v.facultyId))];
+  const { data: facultyProfiles } = await supabase.from('profiles').select('id, name').in('id', facultyIds);
+  const nameMap = new Map((facultyProfiles || []).map(p => [p.id, p.name]));
+
+  return Array.from(cdMap.entries()).map(([cdId, agg]) => ({
+    courseDurationId: cdId,
+    courseCode: agg.code,
+    courseName: agg.name,
+    facultyName: nameMap.get(agg.facultyId) || 'Unknown',
+    totalSessions: agg.sessions,
+    avgAttendance: agg.sessions > 0 ? Math.round(agg.totalPct / agg.sessions) : 0,
   }));
 }
 
-export type LeaveStatus = 'pending' | 'approved' | 'declined';
-export type LeaveType = 'duty' | 'medical' | 'personal' | 'other';
-export type FormType = 'survey' | 'data_collection' | 'feedback' | 'other';
-export type QuestionType = 'short_text' | 'long_text' | 'multiple_choice' | 'checkbox' | 'date';
-export type FormQuestion = { id: string; type: QuestionType; question: string; options?: string[]; required?: boolean; };
-export type Form = { id: string; title: string; description?: string; deadline?: string; type: FormType; questions: FormQuestion[]; createdBy: string; status: string; };
-export type FormResponse = { id: string; formId: string; userId: string; answers: any; };
-export type EventType = 'meeting' | 'workshop' | 'competition' | 'cultural' | 'other';
-export type RequestType = 'leave' | 'community' | 'course_change' | 'other';
-export type RequestStatus = 'pending' | 'approved' | 'declined';
-export type AppRequest = { id: string; type: RequestType; userId: string; data: any; status: RequestStatus; };
-export type CommunityMemberRole = 'member' | 'manager';
-export type CommunityMember = { id: string; communityId: string; userId: string; role: CommunityMemberRole; };
-export type Leave = { id: string; userId: string; userName: string; type: LeaveType; reason: string; fromDate: string; toDate: string; status: LeaveStatus; reg?: string; };
-export type Note = { id: string; moduleId: string; title: string; fileUrl?: string; teacherId: string; };
-
-// Dummy methods to satisfy TS imports where features were stubbed
-export function dbConfigured() { return true; }
-export async function listNotes(moduleId: string) { return []; }
-export async function createNote(input: any) { return input; }
-export async function listForms(filter?: any): Promise<Form[]> { return []; }
-export async function listFormResponses(formId: string): Promise<FormResponse[]> { return []; }
-export async function listLeaves(filter?: any) { return []; }
-export async function listRequests(filter?: any) { return []; }
-export async function getForm(formId: string) { return null; }
-export async function createForm(input: any) { return input; }
-export async function createEvent(input: any) { return input; }
-export async function createLeave(input: any) { return input; }
-export async function decideLeave(id: string, status: string, by: string) { return null; }
-export async function decideRequest(id: string, status: string, by: string) { return null; }
-export async function getCommunityMembers(cId: string) { return []; }
-export async function getUserCommunityRole(cId: string, uId: string) { return null; }
-export async function updateForm(id: string, data: any) { return null; }
-export async function submitFormResponse(input: any) { return input; }
-export async function createModule(input: any) { return input; }
-export async function createBatch(input: any) { return input; }
-export async function createCourse(input: any) { return input; }
-
+export async function createBatch(input: Partial<Batch>): Promise<Batch> {
+  const { data, error } = await supabase.from('batches').insert({
+    name: input.name,
+    program: input.program,
+    year: input.year,
+    section: input.section,
+    department: input.department,
+  }).select().single();
+  if (error) throw error;
+  return mapBatch(data);
+}

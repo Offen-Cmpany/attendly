@@ -1,37 +1,73 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions, Modal, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { colors, fonts, spacing, radius, hairline } from '../src/theme';
-import { listCourses, createCourse, Course, Program } from '../src/lib/db';
+import { listCourseDurations, createCourseDuration, deleteCourseDuration, listBatches, listProfiles, CourseDuration, Batch, Profile } from '../src/lib/db';
 
-const PROGRAMS: Program[] = ['B.Tech CSE', 'B.Tech CSE & AI', 'BCA'];
-
-export default function ManageCourses() {
+export default function ManageClasses() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isWide = width >= 768;
-  const [courses_, setCourses] = useState<Course[]>([]);
+
+  const [classes, setClasses] = useState<CourseDuration[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [teachers, setTeachers] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const [showCreate, setShowCreate] = useState(false);
   const [newCode, setNewCode] = useState('');
   const [newName, setNewName] = useState('');
-  const [newCredits, setNewCredits] = useState('4');
-  const [newSemester, setNewSemester] = useState('1');
-  const [newProgram, setNewProgram] = useState<Program>('B.Tech CSE');
+  const [newSemester, setNewSemester] = useState('6');
+  const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
+  const [selectedTeacher, setSelectedTeacher] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => { listCourses().then(setCourses); }, []);
+  useEffect(() => {
+    Promise.all([
+      listCourseDurations(),
+      listBatches(),
+      listProfiles({ role: 'teacher' })
+    ]).then(([cd, b, t]) => {
+      setClasses(cd);
+      setBatches(b);
+      setTeachers(t);
+      setLoading(false);
+    });
+  }, []);
 
   const handleCreate = async () => {
-    const c = await createCourse({
-      code: newCode, name: newName, credits: parseInt(newCredits),
-      semester: parseInt(newSemester), program: newProgram,
-    });
-    setCourses(prev => [...prev, c]);
-    setShowCreate(false);
-    setNewCode(''); setNewName('');
+    if (!newCode || !newName || !selectedBatch || !selectedTeacher || !newSemester) {
+      Alert.alert('Missing fields', 'Please fill out all fields.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const c = await createCourseDuration({
+        courseCode: newCode.toUpperCase(),
+        courseName: newName,
+        semester: newSemester,
+        batchId: selectedBatch,
+        facultyId: selectedTeacher,
+      });
+      setClasses(prev => [c, ...prev]);
+      setShowCreate(false);
+      setNewCode(''); setNewName(''); setSelectedBatch(null); setSelectedTeacher(null);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to assign class.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const grouped = PROGRAMS.map(p => ({ program: p, courses: courses_.filter(c => c.program === p) }));
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteCourseDuration(id);
+      setClasses(prev => prev.filter(c => c.id !== id));
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to delete assignment.');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -39,69 +75,93 @@ export default function ManageCourses() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Manage Courses</Text>
+        <Text style={styles.headerTitle}>Class Assignments</Text>
         <TouchableOpacity style={styles.createBtn} onPress={() => setShowCreate(true)} activeOpacity={0.7}>
-          <Text style={styles.createBtnText}>+ New Course</Text>
+          <Text style={styles.createBtnText}>+ Assign Class</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {grouped.map(g => (
-          <View key={g.program}>
-            <Text style={styles.sectionTitle}>{g.program}</Text>
-            {g.courses.length === 0 ? (
-              <Text style={styles.emptyText}>No courses yet</Text>
-            ) : (
-              <View style={[styles.grid, isWide && styles.gridWide]}>
-                {g.courses.map(c => (
-                  <TouchableOpacity key={c.id} style={styles.courseCard} activeOpacity={0.7}>
-                    <View style={styles.courseTop}>
-                      <Text style={styles.courseCode}>{c.code}</Text>
-                      <Text style={styles.courseCredits}>{c.credits} cr</Text>
-                    </View>
-                    <Text style={styles.courseName}>{c.name}</Text>
-                    <Text style={styles.courseMeta}>Semester {c.semester}</Text>
-                    {c.teacherId && <Text style={styles.courseTeacher}>Teacher assigned ✓</Text>}
+        <Text style={styles.sectionTitle}>Active Assignments</Text>
+        {loading ? (
+          <ActivityIndicator color={colors.blue600} style={{ marginTop: spacing.xl }} />
+        ) : classes.length === 0 ? (
+          <Text style={styles.emptyText}>No classes have been assigned to faculty yet.</Text>
+        ) : (
+          <View style={[styles.grid, isWide && styles.gridWide]}>
+            {classes.map(c => (
+              <View key={c.id} style={styles.courseCard}>
+                <View style={styles.courseTop}>
+                  <Text style={styles.courseCode}>{c.courseCode}</Text>
+                  <TouchableOpacity onPress={() => handleDelete(c.id)}>
+                    <Text style={{ color: colors.coral600, fontSize: 12, fontFamily: fonts.sansMedium }}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.courseName}>{c.courseName}</Text>
+                
+                <View style={{ marginTop: spacing.md, gap: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ fontSize: 12 }}>👨‍🏫</Text>
+                    <Text style={styles.courseTeacher}>{c.facultyName || 'Unknown Faculty'}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ fontSize: 12 }}>👥</Text>
+                    <Text style={styles.courseMeta}>{c.batchName || 'Unknown Batch'} (S{c.semester})</Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Create Modal */}
+      <Modal visible={showCreate} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modal, isWide && { width: 500 }]}>
+            <Text style={styles.modalTitle}>Assign Faculty to Class</Text>
+            
+            <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+              <Text style={styles.label}>Course Details</Text>
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <TextInput style={[styles.input, { flex: 1 }]} value={newCode} onChangeText={setNewCode} placeholder="Course Code (e.g. CS301)" placeholderTextColor={colors.ink300} />
+                <TextInput style={[styles.input, { width: 80 }]} value={newSemester} onChangeText={setNewSemester} placeholder="Sem" keyboardType="number-pad" />
+              </View>
+              <TextInput style={[styles.input, { marginTop: spacing.sm }]} value={newName} onChangeText={setNewName} placeholder="Course Name (e.g. Data Structures)" placeholderTextColor={colors.ink300} />
+
+              <Text style={[styles.label, { marginTop: spacing.lg }]}>Select Faculty</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
+                {teachers.map(t => (
+                  <TouchableOpacity 
+                    key={t.id} 
+                    style={[styles.selectChip, selectedTeacher === t.id && styles.selectChipActive]} 
+                    onPress={() => setSelectedTeacher(t.id)}
+                  >
+                    <Text style={[styles.selectChipText, selectedTeacher === t.id && styles.selectChipTextActive]}>{t.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <Text style={[styles.label, { marginTop: spacing.lg }]}>Select Batch</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+                {batches.map(b => (
+                  <TouchableOpacity 
+                    key={b.id} 
+                    style={[styles.selectChip, selectedBatch === b.id && styles.selectChipActive]} 
+                    onPress={() => setSelectedBatch(b.id)}
+                  >
+                    <Text style={[styles.selectChipText, selectedBatch === b.id && styles.selectChipTextActive]}>{b.name}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
-            )}
-          </View>
-        ))}
-      </ScrollView>
+            </ScrollView>
 
-      <Modal visible={showCreate} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Create Course</Text>
-            <Text style={styles.label}>Course Code</Text>
-            <TextInput style={styles.input} value={newCode} onChangeText={setNewCode} placeholder="CS301" placeholderTextColor={colors.ink300} />
-            <Text style={styles.label}>Course Name</Text>
-            <TextInput style={styles.input} value={newName} onChangeText={setNewName} placeholder="Data Structures" placeholderTextColor={colors.ink300} />
-            <Text style={styles.label}>Program</Text>
-            <View style={styles.programRow}>
-              {PROGRAMS.map(p => (
-                <TouchableOpacity key={p} style={[styles.programChip, newProgram === p && styles.programChipActive]} onPress={() => setNewProgram(p)}>
-                  <Text style={[styles.programChipText, newProgram === p && styles.programChipTextActive]}>{p}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={{ flexDirection: 'row', gap: spacing.md }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.label}>Semester</Text>
-                <TextInput style={styles.input} value={newSemester} onChangeText={setNewSemester} keyboardType="number-pad" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.label}>Credits</Text>
-                <TextInput style={styles.input} value={newCredits} onChangeText={setNewCredits} keyboardType="number-pad" />
-              </View>
-            </View>
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreate(false)}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmBtn} onPress={handleCreate}>
-                <Text style={styles.confirmBtnText}>Create</Text>
+              <TouchableOpacity style={styles.confirmBtn} onPress={handleCreate} disabled={saving}>
+                <Text style={styles.confirmBtnText}>{saving ? 'Assigning...' : 'Assign Class'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -120,38 +180,38 @@ const styles = StyleSheet.create({
   createBtn: { backgroundColor: colors.blue600, paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.sm, marginTop: spacing.sm, alignSelf: 'flex-start' },
   createBtnText: { fontFamily: fonts.sansMedium, fontSize: 13, color: '#fff' },
   scroll: { flex: 1 },
-  scrollContent: { padding: spacing.md },
-  sectionTitle: { fontFamily: fonts.sansMedium, fontSize: 16, color: colors.ink900, marginTop: spacing.md, marginBottom: spacing.sm },
+  scrollContent: { padding: spacing.md, paddingBottom: spacing.xxl },
+  sectionTitle: { fontFamily: fonts.sansMedium, fontSize: 16, color: colors.ink900, marginBottom: spacing.sm },
   emptyText: { fontFamily: fonts.sans, fontSize: 13, color: colors.ink500, marginBottom: spacing.md },
   grid: { gap: spacing.sm, marginBottom: spacing.md },
   gridWide: { flexDirection: 'row', flexWrap: 'wrap' },
   courseCard: {
     backgroundColor: '#fff', borderRadius: radius.md, borderWidth: hairline, borderColor: colors.border,
-    padding: spacing.md, flexBasis: '48%', flexGrow: 1, minWidth: 240,
+    padding: spacing.md, flexBasis: '48%', flexGrow: 1, minWidth: 280,
   },
   courseTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  courseCode: { fontFamily: fonts.mono, fontSize: 13, color: colors.blue600 },
-  courseCredits: { fontFamily: fonts.sans, fontSize: 12, color: colors.ink500 },
-  courseName: { fontFamily: fonts.sansMedium, fontSize: 15, color: colors.ink900 },
-  courseMeta: { fontFamily: fonts.sans, fontSize: 12, color: colors.ink500, marginTop: 2 },
-  courseTeacher: { fontFamily: fonts.sans, fontSize: 12, color: '#1B8F5A', marginTop: 4 },
+  courseCode: { fontFamily: fonts.monoMedium, fontSize: 13, color: colors.blue600 },
+  courseName: { fontFamily: fonts.sansMedium, fontSize: 16, color: colors.ink900 },
+  courseMeta: { fontFamily: fonts.sans, fontSize: 13, color: colors.ink500 },
+  courseTeacher: { fontFamily: fonts.sansMedium, fontSize: 13, color: colors.ink700 },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modal: { backgroundColor: '#fff', borderRadius: radius.lg, padding: spacing.lg, width: '90%', maxWidth: 480 },
-  modalTitle: { fontFamily: fonts.display, fontSize: 20, color: colors.ink900, marginBottom: spacing.md },
-  label: { fontFamily: fonts.sans, fontSize: 12, color: colors.ink500, marginBottom: 6, marginTop: spacing.sm },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end', alignItems: 'center' },
+  modal: { backgroundColor: '#fff', borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.lg, width: '100%', paddingBottom: spacing.xxl },
+  modalTitle: { fontFamily: fonts.display, fontSize: 20, color: colors.ink900, marginBottom: spacing.sm },
+  label: { fontFamily: fonts.sansMedium, fontSize: 13, color: colors.ink900, marginBottom: 8, marginTop: spacing.xs },
   input: {
-    height: 40, paddingHorizontal: 12, borderWidth: hairline, borderColor: colors.border,
-    borderRadius: radius.sm, backgroundColor: colors.surfaceAlt, fontFamily: fonts.sans, fontSize: 14, color: colors.ink900,
+    height: 44, paddingHorizontal: 12, borderWidth: hairline, borderColor: colors.border,
+    borderRadius: radius.sm, backgroundColor: '#f9f9f9', fontFamily: fonts.sans, fontSize: 14, color: colors.ink900,
   },
-  programRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  programChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
-  programChipActive: { borderColor: colors.blue600, backgroundColor: '#EBF2FB' },
-  programChipText: { fontFamily: fonts.sansMedium, fontSize: 13, color: colors.ink500 },
-  programChipTextActive: { color: colors.blue600 },
-  modalBtns: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
-  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
+  
+  selectChip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.sm, backgroundColor: '#f5f5f5', borderWidth: 1, borderColor: 'transparent' },
+  selectChipActive: { backgroundColor: '#EBF2FB', borderColor: colors.blue600 },
+  selectChipText: { fontFamily: fonts.sans, fontSize: 13, color: colors.ink700 },
+  selectChipTextActive: { fontFamily: fonts.sansMedium, color: colors.blue600 },
+  
+  modalBtns: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xl },
+  cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
   cancelBtnText: { fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink700 },
-  confirmBtn: { flex: 1, paddingVertical: 12, borderRadius: radius.sm, backgroundColor: colors.blue600, alignItems: 'center' },
+  confirmBtn: { flex: 1, paddingVertical: 14, borderRadius: radius.sm, backgroundColor: colors.blue600, alignItems: 'center' },
   confirmBtnText: { fontFamily: fonts.sansMedium, fontSize: 14, color: '#fff' },
 });

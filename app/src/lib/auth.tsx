@@ -21,17 +21,20 @@ type AuthCtx = {
 const Ctx = createContext<AuthCtx | null>(null);
 
 const COLLEGE_DOMAIN = 'cekottarakkara.ac.in';
+const COLLEGE_DOMAIN_SHORT = 'cek.ac.in';
 
 export function detectRoleFromEmail(email: string): Role | null {
   const lower = email.toLowerCase();
-  if (!lower.endsWith(`@${COLLEGE_DOMAIN}`)) return null;
+  if (!lower.endsWith(`@${COLLEGE_DOMAIN}`) && !lower.endsWith(`@${COLLEGE_DOMAIN_SHORT}`)) return null;
   const local = lower.split('@')[0];
-  if (local.startsWith('cek')) return 'student';
+  // Simplification for the MVP test accounts: if it has digits (like a roll number) or starts with cek, it's a student
+  if (local.startsWith('cek') || /\d/.test(local)) return 'student';
   return null;
 }
 
 export function isCollegeEmail(email: string): boolean {
-  return email.toLowerCase().endsWith(`@${COLLEGE_DOMAIN}`);
+  const lower = email.toLowerCase();
+  return lower.endsWith(`@${COLLEGE_DOMAIN}`) || lower.endsWith(`@${COLLEGE_DOMAIN_SHORT}`);
 }
 
 export function isStudentEmail(email: string): boolean {
