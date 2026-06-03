@@ -12,17 +12,31 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const submit = async () => {
+    setErrorMsg('');
     const trimmed = email.trim();
     if (!isCollegeEmail(trimmed)) {
-      Alert.alert('Invalid Email', 'Please use your college email (@cekottarakkara.ac.in)');
+      setErrorMsg('Please use your college email (@cekottarakkara.ac.in)');
       return;
     }
+    
+    console.log('Login attempt started for:', trimmed);
     setBusy(true);
-    try { await signIn(trimmed, password); }
-    catch (e: any) { Alert.alert('Sign in failed', e?.message ?? 'Try again'); }
-    finally { setBusy(false); }
+    try { 
+      await Promise.race([
+        signIn(trimmed, password),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Login Request Timed Out (Supabase is not responding)')), 10000))
+      ]);
+      console.log('Login successful in auth context!');
+    } catch (e: any) { 
+      console.error('Login failed error object:', e);
+      setErrorMsg(e?.message || 'Try again'); 
+    } finally { 
+      console.log('Setting busy to false');
+      setBusy(false); 
+    }
   };
 
   return (
@@ -55,6 +69,13 @@ export default function Login() {
             placeholderTextColor={colors.ink300}
           />
           <View style={{ height: space.xl }} />
+
+          {errorMsg ? (
+            <Text style={{ color: colors.red600, fontFamily: fonts.sansMedium, marginBottom: space.md, textAlign: 'center' }}>
+              {errorMsg}
+            </Text>
+          ) : null}
+
           <Button title={busy ? 'Signing in…' : 'Sign in'} onPress={submit} />
           <View style={{ height: space.lg }} />
           <Text style={styles.footer}>

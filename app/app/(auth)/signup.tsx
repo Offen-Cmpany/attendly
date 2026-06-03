@@ -13,16 +13,26 @@ export default function Signup() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const submit = async () => {
+    setErrorMsg('');
     const trimmedEmail = email.trim();
     if (!isCollegeEmail(trimmedEmail)) {
-      return Alert.alert('Invalid Email', 'Please use your college email (@cekottarakkara.ac.in)');
+      setErrorMsg('Please use your college email (@cekottarakkara.ac.in)');
+      return;
     }
-    if (password.length < 8) return Alert.alert('Password', 'Use at least 8 characters.');
+    if (password.length < 8) {
+      setErrorMsg('Use at least 8 characters.');
+      return;
+    }
     setBusy(true);
-    try { await signUp(name.trim(), trimmedEmail, password); }
-    catch (e: any) { Alert.alert('Sign up failed', e?.message ?? 'Try again'); }
+    try {
+      await signUp(name.trim(), trimmedEmail, password);
+      Alert.alert('Account Created', 'Please check your inbox and click the confirmation link to sign in.');
+      import('expo-router').then(r => r.router.replace('/(auth)/login'));
+    }
+    catch (e: any) { setErrorMsg(e?.message ?? 'Try again'); }
     finally { setBusy(false); }
   };
 
@@ -53,6 +63,13 @@ export default function Signup() {
           <Text style={styles.label}>Password</Text>
           <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry placeholder="At least 8 characters" placeholderTextColor={colors.ink300} />
           <View style={{ height: space.xl }} />
+
+          {errorMsg ? (
+            <Text style={{ color: colors.red600, fontFamily: fonts.sansMedium, marginBottom: space.md, textAlign: 'center' }}>
+              {errorMsg}
+            </Text>
+          ) : null}
+
           <Button title={busy ? 'Creating account…' : 'Create account'} onPress={submit} />
           <View style={{ height: space.lg }} />
           <Text style={styles.footer}>

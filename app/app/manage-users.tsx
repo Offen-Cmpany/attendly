@@ -1,34 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { colors, fonts, spacing, radius, hairline } from '../src/theme';
 import type { Profile } from '../src/lib/db';
 
-type TabKey = 'students' | 'teachers' | 'admins';
+type TabKey = 'students' | 'teachers' | 'admins' | 'pending' | 'debug';
 
-const mockUsers: Record<TabKey, Profile[]> = {
-  students: Array.from({ length: 12 }, (_, i) => ({
-    id: `s${i}`,
-    name: ['Aravind R', 'Lakshmi M', 'Sreehari V', 'Nithya K', 'Adarsh P', 'Meera S', 'Kiran T', 'Divya N', 'Pranav S', 'Anjali B', 'Vishnu K', 'Reshma P'][i],
-    email: `CEK22CS${String(i + 1).padStart(3, '0')}@cekottarakkara.ac.in`,
-    role: 'student' as const, reg: `CEK22CS${String(i + 1).padStart(3, '0')}`,
-    program: (['B.Tech CSE', 'B.Tech CSE', 'B.Tech CSE & AI', 'BCA'] as const)[i % 4],
-    dept: 'CSE', semester: 6, batchId: 'b1',
-  })),
-  teachers: [
-    { id: 't1', name: 'Dr. Rajesh Kumar', email: 'rajesh.kumar@cekottarakkara.ac.in', role: 'teacher' as const, dept: 'CSE', isClassAdvisor: true },
-    { id: 't2', name: 'Prof. Shanti M', email: 'shanti.m@cekottarakkara.ac.in', role: 'teacher' as const, dept: 'CSE' },
-    { id: 't3', name: 'Dr. Anil Kumar P', email: 'anil.p@cekottarakkara.ac.in', role: 'teacher' as const, dept: 'CSE' },
-  ],
-  admins: [
-    { id: 'a1', name: 'Dr. Suresh Babu', email: 'principal@cekottarakkara.ac.in', role: 'admin' as const, designation: 'principal' as const },
-    { id: 'a2', name: 'Dr. Priya S', email: 'hod.cse@cekottarakkara.ac.in', role: 'admin' as const, designation: 'hod' as const },
-    { id: 'a3', name: 'Sreekumar R', email: 'office@cekottarakkara.ac.in', role: 'admin' as const, designation: 'office_staff' as const },
-  ],
-};
-
-const DESIGNATION_LABELS: Record<string, string> = { principal: 'Principal', hod: 'HoD', office_staff: 'Office Staff' };
+const DESIGNATION_LABELS: Record<string, string> = { principal: 'Principal', hod: 'HoD', office_staff: 'Office Staff', pending_staff: 'Pending Staff' };
 
 export default function ManageUsers() {
   const router = useRouter();
@@ -36,8 +15,69 @@ export default function ManageUsers() {
   const isWide = width >= 768;
   const [tab, setTab] = useState<TabKey>('students');
   const [search, setSearch] = useState('');
+  const [users, setUsers] = useState<Record<TabKey, Profile[]>>({ students: [], teachers: [], admins: [], pending: [], debug: [] });
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const users = mockUsers[tab].filter(u =>
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const { listProfiles } = require('../src/lib/db');
+      const allProfiles = await listProfiles();
+      
+      const students = allProfiles.filter((p: Profile) => p.role === 'student' && p.designation !== 'pending_staff');
+      const pending = allProfiles.filter((p: Profile) => p.designation === 'pending_staff');
+      const teachers = allProfiles.filter((p: Profile) => p.role === 'teacher');
+      const admins = allProfiles.filter((p: Profile) => p.role === 'admin');
+      
+      console.log(`Fetched Users -> Students: ${students.length}, Pending: ${pending.length}, Teachers: ${teachers.length}, Admins: ${admins.length}, Total: ${allProfiles.length}`);
+      setUsers({ students, teachers, admins, pending, debug: allProfiles });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchData();
+    }, [])
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchData();
+  };
+
+  const approveUser = async (id: string, newRole: 'teacher' | 'admin', designation?: string) => {
+    try {
+      const { updateProfile } = require('../src/lib/db');
+      const updated = await updateProfile(id, { role: newRole, designation: designation || null });
+      if (!updated) {
+        import('react-native').then(({ Alert }) => Alert.alert('Database Error', 'Could not update user in Supabase. Check RLS or Database logs.'));
+        return;
+      }
+      // Remove from pending and append to appropriate list locally to update UI instantly
+      setUsers(prev => {
+        const userToMove = prev.pending.find(u => u.id === id);
+        if (!userToMove) return prev;
+        const updatedUser = { ...userToMove, role: newRole, designation };
+        return {
+          ...prev,
+          pending: prev.pending.filter(u => u.id !== id),
+          teachers: newRole === 'teacher' ? [...prev.teachers, updatedUser as Profile] : prev.teachers,
+          admins: newRole === 'admin' ? [...prev.admins, updatedUser as Profile] : prev.admins,
+        };
+      });
+    } catch (e) {
+      console.error(e);
+      import('react-native').then(({ Alert }) => Alert.alert('Error', 'Failed to approve user.'));
+    }
+  };
+
+  const filteredUsers = users[tab].filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
     u.email.toLowerCase().includes(search.toLowerCase()) ||
     (u.reg ?? '').toLowerCase().includes(search.toLowerCase())
@@ -54,10 +94,10 @@ export default function ManageUsers() {
 
       {/* Tab Bar */}
       <View style={styles.tabBar}>
-        {(['students', 'teachers', 'admins'] as TabKey[]).map(t => (
+        {(['students', 'teachers', 'admins', 'pending', 'debug'] as TabKey[]).map(t => (
           <TouchableOpacity key={t} style={[styles.tab, tab === t && styles.tabActive]} onPress={() => { setTab(t); setSearch(''); }}>
-            <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>{t.charAt(0).toUpperCase() + t.slice(1)}</Text>
-            <Text style={[styles.tabCount, tab === t && styles.tabCountActive]}>{mockUsers[t].length}</Text>
+            <Text style={[styles.tabText, tab === t && styles.tabTextActive, t === 'debug' && { color: 'red' }]}>{t.charAt(0).toUpperCase() + t.slice(1)}</Text>
+            <Text style={[styles.tabCount, tab === t && styles.tabCountActive]}>{users[t].length}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -73,22 +113,53 @@ export default function ManageUsers() {
         />
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {users.map(u => (
+      <ScrollView 
+        style={styles.scroll} 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {loading && !refreshing ? (
+           <Text style={styles.emptyText}>Loading...</Text>
+        ) : filteredUsers.length === 0 ? (
+           <Text style={styles.emptyText}>No users found.</Text>
+        ) : filteredUsers.map(u => (
           <View key={u.id} style={styles.userCard}>
-            <View style={[styles.avatar, { backgroundColor: tab === 'students' ? '#EBF2FB' : tab === 'teachers' ? '#F0E6FF' : '#FFF3E0' }]}>
-              <Text style={styles.avatarText}>{u.name[0]}</Text>
+            <View style={styles.userInfoRow}>
+              <View style={[styles.avatar, { backgroundColor: tab === 'students' ? '#EBF2FB' : tab === 'teachers' ? '#F0E6FF' : tab === 'pending' ? '#f5f5f5' : '#FFF3E0' }]}>
+                <Text style={styles.avatarText}>{u.name[0]}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.userName}>{u.name}</Text>
+                <Text style={styles.userEmail}>{u.email}</Text>
+                {u.reg && <Text style={styles.userMeta}>{u.reg} · {u.program}</Text>}
+                {u.designation && <Text style={styles.userMeta}>{DESIGNATION_LABELS[u.designation] || u.designation}</Text>}
+                {u.isClassAdvisor && <Text style={[styles.userMeta, { color: '#1B8F5A' }]}>Class Advisor ✓</Text>}
+              </View>
+              <View style={styles.roleBadge}>
+                <Text style={styles.roleText}>{tab === 'pending' ? 'Pending' : u.role}</Text>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.userName}>{u.name}</Text>
-              <Text style={styles.userEmail}>{u.email}</Text>
-              {u.reg && <Text style={styles.userMeta}>{u.reg} · {u.program}</Text>}
-              {u.designation && <Text style={styles.userMeta}>{DESIGNATION_LABELS[u.designation]}</Text>}
-              {u.isClassAdvisor && <Text style={[styles.userMeta, { color: '#1B8F5A' }]}>Class Advisor ✓</Text>}
-            </View>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleText}>{u.role}</Text>
-            </View>
+            
+            {tab === 'debug' && (
+              <View style={{ marginTop: 8, padding: 8, backgroundColor: '#f5f5f5', borderRadius: 4 }}>
+                <Text style={{ fontSize: 10, fontFamily: 'monospace' }}>Role: {u.role} | Desig: {u.designation || 'null'}</Text>
+              </View>
+            )}
+
+            {tab === 'pending' && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                <TouchableOpacity style={styles.approveBtn} onPress={() => approveUser(u.id, 'teacher')}>
+                  <Text style={styles.approveBtnText}>Approve as Teacher</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.approveBtn, { backgroundColor: '#FFF3E0' }]} onPress={() => approveUser(u.id, 'admin', 'office_staff')}>
+                  <Text style={[styles.approveBtnText, { color: '#C47D1A' }]}>Approve as Staff</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.approveBtn, { backgroundColor: '#F0E6FF' }]} onPress={() => approveUser(u.id, 'admin', 'hod')}>
+                  <Text style={[styles.approveBtnText, { color: '#6A1B9A' }]}>Approve as HoD</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         ))}
       </ScrollView>
@@ -122,13 +193,19 @@ const styles = StyleSheet.create({
 
   userCard: {
     backgroundColor: '#fff', borderRadius: radius.md, borderWidth: hairline, borderColor: colors.border,
-    padding: spacing.md, flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm, gap: spacing.md,
+    padding: spacing.md, marginBottom: spacing.sm,
+  },
+  userInfoRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
   },
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontFamily: fonts.sansMedium, fontSize: 18, color: colors.blue600 },
   userName: { fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink900 },
   userEmail: { fontFamily: fonts.sans, fontSize: 12, color: colors.ink500, marginTop: 1 },
   userMeta: { fontFamily: fonts.sans, fontSize: 12, color: colors.ink500, marginTop: 1 },
-  roleBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.sm, backgroundColor: colors.surfaceAlt },
-  roleText: { fontFamily: fonts.sansMedium, fontSize: 11, color: colors.ink700 },
+  roleBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.sm, backgroundColor: colors.surfaceAlt, position: 'absolute', right: spacing.md, top: spacing.md },
+  roleText: { fontFamily: fonts.sansMedium, fontSize: 11, color: colors.ink700, textTransform: 'capitalize' },
+  emptyText: { fontFamily: fonts.sans, fontSize: 14, color: colors.ink500, textAlign: 'center', marginTop: spacing.xl },
+  approveBtn: { flex: 1, backgroundColor: '#EBF2FB', paddingVertical: 8, borderRadius: radius.sm, alignItems: 'center' },
+  approveBtnText: { fontFamily: fonts.sansMedium, fontSize: 12, color: colors.blue600 },
 });

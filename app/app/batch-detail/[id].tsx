@@ -5,12 +5,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, fonts, spacing, radius, hairline } from '../../src/theme';
 import { listProfiles, getBatch, Batch, Profile } from '../../src/lib/db';
 
-const mockStudents: Profile[] = Array.from({ length: 20 }, (_, i) => ({
-  id: `s${i}`, name: ['Aravind R', 'Lakshmi M', 'Sreehari V', 'Nithya K', 'Adarsh P', 'Meera S', 'Kiran T', 'Divya N', 'Pranav S', 'Anjali B', 'Vishnu K', 'Reshma P', 'Abhijith M', 'Sneha L', 'Jithin G', 'Amritha R', 'Sachin V', 'Pooja K', 'Rahul M', 'Gayathri S'][i],
-  email: `CEK22CS${String(i + 1).padStart(3, '0')}@cekottarakkara.ac.in`, role: 'student' as const,
-  reg: `CEK22CS${String(i + 1).padStart(3, '0')}`, program: 'B.Tech CSE' as const, dept: 'CSE', semester: 6, batchId: 'b1',
-}));
+// Removed mockStudents
 
+// Mock attendance percentages will be calculated dynamically later
 const attendancePcts = [92, 88, 76, 95, 72, 85, 90, 68, 94, 83, 79, 91, 87, 74, 96, 82, 70, 93, 86, 77];
 
 export default function BatchDetail() {
@@ -21,9 +18,29 @@ export default function BatchDetail() {
   const [search, setSearch] = useState('');
   const [batch, setBatch] = useState<Batch | null>(null);
 
-  useEffect(() => { getBatch(id).then(setBatch); }, [id]);
+  const [students, setStudents] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = mockStudents.filter(s =>
+  useEffect(() => {
+    (async () => {
+      try {
+        const batchData = await getBatch(id);
+        setBatch(batchData);
+        if (id) {
+          const list = await listProfiles({ role: 'student' });
+          // Temporarily doing a client-side filter since we haven't added advanced listProfiles filters for batchId
+          const batchStudents = list.filter(p => p.batchId === id);
+          setStudents(batchStudents);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [id]);
+
+  const filtered = students.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     (s.reg ?? '').toLowerCase().includes(search.toLowerCase())
   );
@@ -68,7 +85,13 @@ export default function BatchDetail() {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {filtered.map((s, i) => {
+        {loading ? (
+          <Text style={{ textAlign: 'center', marginTop: 20 }}>Loading...</Text>
+        ) : filtered.length === 0 ? (
+          <View style={{ backgroundColor: '#fff', padding: 20, borderRadius: 8, alignItems: 'center' }}>
+            <Text style={{ color: '#666' }}>No students found in this batch.</Text>
+          </View>
+        ) : filtered.map((s, i) => {
           const pct = attendancePcts[i % attendancePcts.length];
           return (
             <View key={s.id} style={styles.studentCard}>

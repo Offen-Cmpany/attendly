@@ -6,11 +6,7 @@ import { colors, fonts, spacing, radius, hairline } from '../theme';
 import { useAuth } from '../lib/auth';
 import { listCourses, Course } from '../lib/db';
 
-const todaySchedule = [
-  { time: '9:00 AM', subject: 'Data Structures', code: 'CS301', batch: 'B.Tech CSE 2022 A', room: 'CS Lab 1' },
-  { time: '11:00 AM', subject: 'Operating Systems', code: 'CS303', batch: 'B.Tech CSE 2022 A', room: 'Room 301' },
-  { time: '2:00 PM', subject: 'Programming in C', code: 'BCA101', batch: 'BCA 2024 A', room: 'Room 105' },
-];
+// Removed hardcoded todaySchedule
 
 export default function TeacherHome() {
   const { user, profile } = useAuth();
@@ -43,11 +39,10 @@ export default function TeacherHome() {
           <Text style={styles.date}>{dateStr}</Text>
         </View>
 
-        {/* Hero Card */}
         <TouchableOpacity style={styles.heroCard} activeOpacity={0.85} onPress={() => router.push('/timetable' as any)}>
           <View>
-            <Text style={styles.heroTitle}>{todaySchedule.length} classes today</Text>
-            <Text style={styles.heroSub}>Next: {todaySchedule[0]?.subject ?? 'No classes'} at {todaySchedule[0]?.time}</Text>
+            <Text style={styles.heroTitle}>Your Dashboard</Text>
+            <Text style={styles.heroSub}>Manage your classes and attendance</Text>
           </View>
           <View style={styles.heroBadge}>
             <Text style={styles.heroBadgeText}>View Schedule →</Text>
@@ -72,33 +67,21 @@ export default function TeacherHome() {
 
         {/* Today's Schedule */}
         <Text style={styles.sectionTitle}>Today's Schedule</Text>
-        {todaySchedule.map((item, i) => (
-          <View key={i} style={styles.scheduleCard}>
-            <View style={styles.scheduleTime}>
-              <Text style={styles.scheduleTimeText}>{item.time}</Text>
-            </View>
-            <View style={styles.scheduleInfo}>
-              <Text style={styles.scheduleName}>{item.subject}</Text>
-              <Text style={styles.scheduleMeta}>{item.code} · {item.batch}</Text>
-              <Text style={styles.scheduleRoom}>📍 {item.room}</Text>
-            </View>
-            <TouchableOpacity style={styles.markBtn} activeOpacity={0.7}>
-              <Text style={styles.markBtnText}>Mark</Text>
-            </TouchableOpacity>
-          </View>
-        ))}
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>No classes scheduled for today.</Text>
+        </View>
 
         {/* My Subjects */}
         <Text style={styles.sectionTitle}>My Subjects</Text>
         {loading ? (
           <ActivityIndicator color={colors.blue600} style={{ marginVertical: spacing.lg }} />
+        ) : courses_.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>You haven't been assigned any subjects yet.</Text>
+          </View>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subjectsScroll}>
-            {(courses_.length > 0 ? courses_ : [
-              { id: 'c1', code: 'CS301', name: 'Data Structures', program: 'B.Tech CSE', semester: 3, credits: 4, batchIds: ['b1'] },
-              { id: 'c2', code: 'CS303', name: 'Operating Systems', program: 'B.Tech CSE', semester: 3, credits: 4, batchIds: ['b1'] },
-              { id: 'c5', code: 'BCA101', name: 'Programming in C', program: 'BCA', semester: 1, credits: 4, batchIds: ['b4'] },
-            ] as Course[]).map((c) => (
+            {courses_.map((c) => (
               <TouchableOpacity
                 key={c.id}
                 style={styles.subjectCard}
@@ -259,4 +242,10 @@ const styles = StyleSheet.create({
   advisoryTitle: { fontFamily: fonts.sansMedium, fontSize: 15, color: colors.ink900 },
   advisoryMeta: { fontFamily: fonts.sans, fontSize: 13, color: colors.ink500, marginTop: 2 },
   advisoryArrow: { fontFamily: fonts.sansMedium, fontSize: 18, color: colors.ink300 },
+  
+  emptyCard: {
+    backgroundColor: '#fff', borderRadius: radius.md, borderWidth: hairline, borderColor: colors.border,
+    padding: spacing.xl, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md,
+  },
+  emptyText: { fontFamily: fonts.sans, fontSize: 14, color: colors.ink500, textAlign: 'center' },
 });
