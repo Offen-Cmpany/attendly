@@ -1,0 +1,463 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Attendly — Responsive</title>
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  html, body { height: 100%; margin: 0; background: #f7f6f2; }
+  body { font-family: 'Inter','Manjari',system-ui,sans-serif; color: #111112; -webkit-font-smoothing: antialiased; }
+  #root { min-height: 100vh; }
+  * { box-sizing: border-box; }
+  /* hide scrollbars on horizontal chip rows */
+  .nowheel::-webkit-scrollbar { display: none; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="mobile-screens.jsx"></script>
+<script type="text/babel" src="mobile-screens-2.jsx"></script>
+<script type="text/babel" src="mobile-screens-3.jsx"></script>
+<script type="text/babel" src="faculty-screens.jsx"></script>
+<script type="text/babel" src="web-app.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+function useViewport() {
+  const [w, setW] = useState(window.innerWidth);
+  useEffect(() => {
+    const on = () => setW(window.innerWidth);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
+  return w;
+}
+
+// Which screens belong to which role
+const STUDENT_SCREENS = [
+  { id: 'home',        label: 'Home',             comp: StudentHome },
+  { id: 'subject',     label: 'Subject detail',   comp: SubjectDetail },
+  { id: 'timetable',   label: 'Timetable',        comp: Timetable },
+  { id: 'updates',     label: 'Updates',          comp: Updates },
+  { id: 'communities', label: 'Communities',      comp: Communities },
+  { id: 'leave',       label: 'Request leave',    comp: LeaveRequest },
+  { id: 'profile',     label: 'Profile',          comp: Profile },
+];
+const FACULTY_SCREENS = [
+  { id: 'fhome',       label: 'Home',             comp: FacultyHome },
+  { id: 'mark',        label: 'Mark attendance',  comp: FacultyMarkAttendance },
+  { id: 'fclass',      label: 'Class detail',     comp: FacultyClassDetail },
+  { id: 'fleaves',     label: 'Leave approvals',  comp: FacultyLeaveApprovals },
+  { id: 'freports',    label: 'Reports',          comp: FacultyReports },
+  { id: 'web',         label: 'Dashboard (web)',  comp: WebApp, desktopNative: true },
+];
+
+// ─────────────────────────────────────────────
+// Mobile screens are designed at 402×874 with the system status-bar eating
+// the first ~54px. On real device widths they render edge-to-edge.
+// On desktop we center them at ~460px with a faux device backdrop.
+// ─────────────────────────────────────────────
+
+function PhoneFrame({ children, desktop }) {
+  if (!desktop) {
+    // full viewport — just render. Children already handle their own top padding.
+    return (
+      <div style={{
+        position: 'relative', height: '100vh', width: '100%', overflow: 'hidden',
+        background: C.surfaceAlt,
+      }}>
+        {/* fake status bar area (real mobile browsers have their own) */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 44, zIndex: 5,
+          background: 'transparent', pointerEvents: 'none',
+        }} />
+        <div style={{ height: '100%', overflow: 'auto', position: 'relative' }}>
+          {children}
+        </div>
+      </div>
+    );
+  }
+  // Desktop: phone-shaped card centered
+  return (
+    <div style={{
+      width: 420, height: 860, position: 'relative',
+      background: '#111', borderRadius: 48, padding: 10,
+      boxShadow: '0 40px 80px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.12)',
+      flexShrink: 0,
+    }}>
+      <div style={{
+        width: '100%', height: '100%', borderRadius: 40, overflow: 'hidden',
+        position: 'relative', background: C.surfaceAlt,
+      }}>
+        {/* dynamic island */}
+        <div style={{
+          position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+          width: 120, height: 34, borderRadius: 24, background: '#000', zIndex: 50,
+        }} />
+        <div style={{ height: '100%', overflow: 'auto', position: 'relative' }}>
+          {children}
+        </div>
+        {/* home indicator */}
+        <div style={{
+          position: 'absolute', bottom: 6, left: 0, right: 0, zIndex: 60,
+          display: 'flex', justifyContent: 'center', pointerEvents: 'none',
+        }}>
+          <div style={{ width: 130, height: 4.5, borderRadius: 100, background: 'rgba(0,0,0,0.22)' }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Sidebar (desktop) / Drawer (mobile)
+// ─────────────────────────────────────────────
+function Sidebar({ role, setRole, screen, setScreen, isDesktop, drawerOpen, setDrawerOpen }) {
+  const screens = role === 'student' ? STUDENT_SCREENS : FACULTY_SCREENS;
+  const content = (
+    <div style={{
+      width: isDesktop ? 260 : '86vw', maxWidth: 320,
+      height: '100vh', background: '#fff',
+      borderRight: `0.5px solid ${C.border}`,
+      display: 'flex', flexDirection: 'column',
+      fontFamily: font,
+    }}>
+      {/* Brand */}
+      <div style={{ padding: '20px 20px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{
+          width: 30, height: 30, borderRadius: 8, background: C.blue600,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#fff', fontWeight: 500, fontSize: 15, fontFamily: mono,
+        }}>a</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 500, letterSpacing: -0.2 }}>Attendly</div>
+          <div style={{ fontSize: 10, color: C.ink500, fontFamily: mono }}>GCEK · v1.0</div>
+        </div>
+        {!isDesktop && (
+          <div onClick={() => setDrawerOpen(false)} style={{
+            width: 32, height: 32, borderRadius: 999, background: C.surfaceAlt,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8" stroke={C.ink700} strokeWidth="1.6" strokeLinecap="round"/></svg>
+          </div>
+        )}
+      </div>
+
+      {/* Role switch */}
+      <div style={{ padding: '0 16px 16px' }}>
+        <div style={{ fontSize: 10, color: C.ink500, letterSpacing: 0.3, textTransform: 'uppercase', fontWeight: 500, marginBottom: 6, paddingLeft: 4 }}>Role</div>
+        <div style={{ display: 'flex', gap: 4, padding: 3, background: C.surfaceAlt, borderRadius: 8 }}>
+          {['student', 'faculty'].map(r => (
+            <div key={r} onClick={() => { setRole(r); setScreen(r === 'student' ? 'home' : 'fhome'); }} style={{
+              flex: 1, textAlign: 'center', padding: '7px 10px', borderRadius: 6,
+              fontSize: 12, fontWeight: 500, cursor: 'pointer',
+              background: role === r ? '#fff' : 'transparent',
+              color: role === r ? C.ink900 : C.ink500,
+              boxShadow: role === r ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+              textTransform: 'capitalize',
+            }}>{r}</div>
+          ))}
+        </div>
+      </div>
+
+      {/* Screens */}
+      <div style={{ padding: '0 10px', flex: 1, overflow: 'auto' }}>
+        <div style={{ fontSize: 10, color: C.ink500, letterSpacing: 0.3, textTransform: 'uppercase', fontWeight: 500, marginBottom: 6, padding: '0 10px' }}>Screens</div>
+        {screens.map(s => (
+          <div key={s.id} onClick={() => { setScreen(s.id); setDrawerOpen(false); }} style={{
+            padding: '9px 12px', borderRadius: 8, marginBottom: 2,
+            fontSize: 13, fontWeight: 500, cursor: 'pointer',
+            background: screen === s.id ? C.blue50 : 'transparent',
+            color: screen === s.id ? C.blue800 : C.ink700,
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: 999,
+              background: screen === s.id ? C.blue600 : 'transparent',
+              border: screen === s.id ? 'none' : `1px solid ${C.ink200 || '#c8c8cb'}`,
+            }} />
+            <span style={{ flex: 1 }}>{s.label}</span>
+            {s.desktopNative && (
+              <span style={{ fontSize: 9, fontFamily: mono, color: C.ink300, padding: '1px 5px', border: `0.5px solid ${C.border}`, borderRadius: 4 }}>web</span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Footer user card */}
+      <div style={{ padding: '14px 16px', borderTop: `0.5px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+        {role === 'student' ? (
+          <>
+            <div style={{ width: 32, height: 32, borderRadius: 999, background: C.coral200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 500 }}>AS</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 500 }}>Aysha Salim</div>
+              <div style={{ fontSize: 10, color: C.ink500, fontFamily: mono }}>S6 CSE‑B</div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ width: 32, height: 32, borderRadius: 999, background: C.blue200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.blue900, fontSize: 12, fontWeight: 500, flexShrink: 0 }}>SN</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 500 }}>Dr. Suja N</div>
+              <div style={{ fontSize: 10, color: C.ink500 }}>CSE · HoD</div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  if (isDesktop) return content;
+
+  // mobile: overlay drawer
+  if (!drawerOpen) return null;
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 100,
+      background: 'rgba(0,0,0,0.35)', display: 'flex',
+    }} onClick={() => setDrawerOpen(false)}>
+      <div onClick={e => e.stopPropagation()}>{content}</div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Right-hand context pane (desktop only) — design-system facts
+// ─────────────────────────────────────────────
+function ContextPane({ role, screen }) {
+  const info = {
+    home: { title: 'Home', tag: 'Student · mobile', notes: [
+      'Hero answers: am I safe, how many hours can I skip?',
+      'Two weights only (400/500). Display size 28/500.',
+      'No drop shadows — depth via surface color + 0.5px borders.',
+    ]},
+    subject: { title: 'Subject detail', tag: 'Student · mobile', notes: [
+      'Skip-calculator framing: decision, not judgement.',
+      'Watch chip (warn-bg + warn-fg) maps to 75–79%.',
+      'Progress fill color follows attendance state.',
+    ]},
+    timetable: { title: 'Timetable', tag: 'Student · mobile', notes: [
+      'Compact weekly grid. Today column accented in blue-600.',
+      'Done blocks are filled; upcoming are tinted (blue-50/coral-50).',
+    ]},
+    updates: { title: 'University updates', tag: 'Student · mobile', notes: [
+      'Aggregated from KTU, Calicut, MG, Kerala public feeds.',
+      'Filterable by exam / result / holiday / circular.',
+    ]},
+    communities: { title: 'Communities', tag: 'Student · mobile', notes: [
+      'Native community layer replaces WhatsApp chaos.',
+      'Events link through to duty-leave request workflow.',
+    ]},
+    leave: { title: 'Request leave', tag: 'Student · mobile', notes: [
+      'Offline-first: queues locally, syncs when online.',
+      'Duty-leave pre-links the originating community event.',
+    ]},
+    profile: { title: 'Profile', tag: 'Student · mobile', notes: [
+      'Language toggle (English · മലയാളം) is a first-class pref.',
+      'Manjari font ships embedded — no system fallback.',
+    ]},
+    mark: { title: 'Mark attendance', tag: 'Faculty · mobile', notes: [
+      'Default all-present. Tap only the absentees.',
+      '"Offline · queued" pill is honest about campus Wi-Fi.',
+      'One tap is better than two.',
+    ]},
+    fhome: { title: 'Home', tag: 'Faculty · mobile', notes: [
+      'Hero surfaces the single pending decision: classes to mark.',
+      '"Mark all present" is one tap, framed as an affordance not a shortcut.',
+    ]},
+    fclass: { title: 'Class detail', tag: 'Faculty · mobile', notes: [
+      'Aggregate at top, at-risk students flagged by surface color.',
+      'Safe/Watch/Risk counts replicate the palette semantics.',
+    ]},
+    fleaves: { title: 'Leave approvals', tag: 'Faculty · mobile', notes: [
+      'Queue-style list — each card is a decision, not a record.',
+      'Impact line shows the post-approval attendance state.',
+    ]},
+    freports: { title: 'Reports', tag: 'Faculty · mobile', notes: [
+      'Accreditation exports ship quietly — no "beta" tag.',
+      'CSV / PDF / XLSX generated locally, queued to sync.',
+    ]},
+    web: { title: 'Dashboard', tag: 'Faculty / HoD · web', notes: [
+      'Desktop-native. Sidebar nav replaces bottom tabs above 768px.',
+      'Accreditation exports (NAAC/OBE) run quietly in the background.',
+    ]},
+  }[screen] || { title: '', tag: '', notes: [] };
+
+  return (
+    <div style={{
+      width: 300, flexShrink: 0,
+      borderLeft: `0.5px solid ${C.border}`,
+      background: '#fff',
+      padding: '24px 24px 32px',
+      display: 'flex', flexDirection: 'column', gap: 20,
+      fontFamily: font, overflow: 'auto', height: '100vh',
+    }}>
+      <div>
+        <div style={{ fontSize: 11, color: C.ink500, letterSpacing: 0.3, textTransform: 'uppercase', fontWeight: 500, marginBottom: 6 }}>{info.tag}</div>
+        <div style={{ fontSize: 22, fontWeight: 500, letterSpacing: -0.3 }}>{info.title}</div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 11, color: C.ink500, letterSpacing: 0.3, textTransform: 'uppercase', fontWeight: 500, marginBottom: 8 }}>Design notes</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {info.notes.map((n, i) => (
+            <div key={i} style={{
+              fontSize: 13, color: C.ink700, lineHeight: 1.5, padding: '10px 12px',
+              background: C.surfaceAlt, borderRadius: 8,
+            }}>{n}</div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 11, color: C.ink500, letterSpacing: 0.3, textTransform: 'uppercase', fontWeight: 500, marginBottom: 8 }}>Tokens in play</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {[
+            { l: 'blue-600', c: C.blue600 },
+            { l: 'blue-900', c: C.blue900 },
+            { l: 'coral-400', c: C.coral400 },
+            { l: 'safe-bg', c: C.safeBg, fg: C.safeFg },
+            { l: 'warn-bg', c: C.warnBg, fg: C.warnFg },
+            { l: 'risk-bg', c: C.riskBg, fg: C.riskFg },
+          ].map(t => (
+            <div key={t.l} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '4px 8px 4px 6px',
+              border: `0.5px solid ${C.border}`, borderRadius: 999,
+              fontSize: 10, fontFamily: mono, color: C.ink700,
+            }}>
+              <span style={{ width: 12, height: 12, borderRadius: 3, background: t.c }} />
+              {t.l}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 11, color: C.ink500, letterSpacing: 0.3, textTransform: 'uppercase', fontWeight: 500, marginBottom: 8 }}>Voice</div>
+        <div style={{
+          fontSize: 13, color: C.ink700, lineHeight: 1.55,
+          padding: '12px 14px', background: C.blue50, color: C.blue900,
+          borderRadius: 10,
+        }}>
+          “You can skip 14 more hours and stay eligible.”
+          <div style={{ fontSize: 11, color: C.blue800, marginTop: 6, opacity: 0.75 }}>
+            Framing attendance as a decision, never a judgement.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Top bar shown on mobile only, with role hint + menu
+// ─────────────────────────────────────────────
+function MobileTopBar({ role, screen, setDrawerOpen }) {
+  const screens = role === 'student' ? STUDENT_SCREENS : FACULTY_SCREENS;
+  const cur = screens.find(s => s.id === screen);
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 80, height: 44,
+      background: 'rgba(255,255,255,0.92)',
+      backdropFilter: 'blur(18px)',
+      borderBottom: `0.5px solid ${C.border}`,
+      display: 'flex', alignItems: 'center', padding: '0 14px', gap: 10,
+      fontFamily: font,
+    }}>
+      <div onClick={() => setDrawerOpen(true)} style={{
+        width: 32, height: 32, borderRadius: 999, background: C.surfaceAlt,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+      }}>
+        <svg width="14" height="12" viewBox="0 0 14 12"><path d="M1 1h12M1 6h12M1 11h12" stroke={C.ink700} strokeWidth="1.6" strokeLinecap="round"/></svg>
+      </div>
+      <div style={{ fontSize: 11, color: C.ink500, textTransform: 'capitalize' }}>{role} · {cur?.label}</div>
+      <div style={{ flex: 1 }} />
+      <div style={{
+        width: 28, height: 28, borderRadius: 999, background: C.blue600,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: '#fff', fontSize: 11, fontWeight: 500, fontFamily: mono,
+      }}>a</div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Main layout
+// ─────────────────────────────────────────────
+function App() {
+  const [role, setRole] = useState('student');
+  const [screen, setScreen] = useState('home');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const width = useViewport();
+
+  const isDesktop = width >= 1024;
+  const isTablet = width >= 768 && width < 1024;
+
+  const screens = role === 'student' ? STUDENT_SCREENS : FACULTY_SCREENS;
+  const cur = screens.find(s => s.id === screen) || screens[0];
+  const Screen = cur.comp;
+
+  const showWebNative = cur.desktopNative && (isDesktop || isTablet);
+
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh', background: C.surfaceAlt }}>
+      {/* Sidebar */}
+      <Sidebar
+        role={role} setRole={setRole}
+        screen={screen} setScreen={setScreen}
+        isDesktop={isDesktop || isTablet}
+        drawerOpen={drawerOpen} setDrawerOpen={setDrawerOpen}
+      />
+
+      {/* Stage */}
+      <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex' }}>
+        {showWebNative ? (
+          // Dashboard renders full-bleed at tablet+ widths
+          <div style={{ flex: 1, minWidth: 0, overflow: 'auto', height: '100vh' }}>
+            <WebApp />
+          </div>
+        ) : isDesktop || isTablet ? (
+          // Desktop: centered phone preview on stage
+          <div style={{
+            flex: 1, minWidth: 0,
+            background: C.surfaceAlt,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 32, height: '100vh', overflow: 'hidden',
+            backgroundImage: `radial-gradient(${C.border} 0.5px, transparent 0.5px)`,
+            backgroundSize: '24px 24px',
+          }}>
+            <PhoneFrame desktop>
+              <Screen />
+            </PhoneFrame>
+          </div>
+        ) : (
+          // Mobile: full viewport
+          <>
+            <MobileTopBar role={role} screen={screen} setDrawerOpen={setDrawerOpen} />
+            <div style={{ flex: 1, paddingTop: 0, height: '100vh', overflow: 'hidden', width: '100%' }}>
+              <PhoneFrame desktop={false}>
+                <Screen />
+              </PhoneFrame>
+            </div>
+          </>
+        )}
+
+        {/* Context pane — desktop only, and not shown when dashboard is full-bleed */}
+        {isDesktop && !showWebNative && <ContextPane role={role} screen={screen} />}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

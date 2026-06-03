@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(mkdir -p design-import)",
+      "Bash(cp /Users/sal/.claude/projects/-Users-sal-Documents-attendance-app/179f547e-aaea-4231-9947-efd693eef252/tool-results/webfetch-1776584313728-679mfe.bin design-import/archive.gz)",
+      "Bash(gunzip -c archive.gz)",
+      "Bash(tar tf *)",
+      "Bash(tar xf *)",
+      "Bash(npx --yes create-expo-app@latest app --template blank-typescript)",
+      "Bash(npx expo *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"exit=$?\")"
+    ]
+  }
+}

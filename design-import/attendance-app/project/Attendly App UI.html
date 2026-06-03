@@ -1,0 +1,179 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Attendly — App UI</title>
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  html, body { height: 100%; background: #f0eee9; }
+  body { margin: 0; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="mobile-screens.jsx"></script>
+<script type="text/babel" src="mobile-screens-2.jsx"></script>
+<script type="text/babel" src="mobile-screens-3.jsx"></script>
+<script type="text/babel" src="web-app.jsx"></script>
+
+<script type="text/babel">
+const { useState } = React;
+
+// A phone that wraps a screen without the default nav bar/title (screens render their own header).
+function Phone({ label, children, dark = false }) {
+  return (
+    <DCArtboard label={label} width={402} height={874} style={{ borderRadius: 48, boxShadow: '0 40px 80px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.12)', background: 'transparent' }}>
+      <div style={{
+        width: 402, height: 874, borderRadius: 48, overflow: 'hidden', position: 'relative',
+        background: dark ? '#000' : C.surfaceAlt,
+        fontFamily: "-apple-system, system-ui, sans-serif",
+        WebkitFontSmoothing: 'antialiased',
+      }}>
+        {/* dynamic island */}
+        <div style={{
+          position: 'absolute', top: 11, left: '50%', transform: 'translateX(-50%)',
+          width: 126, height: 37, borderRadius: 24, background: '#000', zIndex: 50,
+        }} />
+        {/* status bar */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}>
+          <IOSStatusBar dark={dark} />
+        </div>
+        <div style={{ height: '100%', overflow: 'hidden' }}>
+          {children}
+        </div>
+        {/* home indicator */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 60,
+          height: 34, display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
+          paddingBottom: 8, pointerEvents: 'none',
+        }}>
+          <div style={{
+            width: 139, height: 5, borderRadius: 100,
+            background: dark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.25)',
+          }} />
+        </div>
+      </div>
+    </DCArtboard>
+  );
+}
+
+// ---------- Cover ----------
+function Cover() {
+  return (
+    <div style={{ padding: '0 60px 48px', maxWidth: 1200 }}>
+      <div style={{
+        fontSize: 12, color: 'rgba(60,50,40,0.55)', fontWeight: 500,
+        letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 10,
+      }}>Attendly · v1.0 · April 2026</div>
+      <div style={{
+        fontSize: 44, fontWeight: 500, letterSpacing: -1, color: '#2a2a2c',
+        lineHeight: 1.1, marginBottom: 14, maxWidth: 820,
+      }}>Student-first attendance for Kerala higher education</div>
+      <div style={{
+        fontSize: 16, color: 'rgba(60,50,40,0.7)', lineHeight: 1.5, maxWidth: 720,
+      }}>
+        Full v1 surface across mobile (student &amp; faculty) and web (faculty &amp; admin).
+        Every screen answers the one question students actually ask: <i>am I safe, and how many hours can I skip?</i>
+      </div>
+
+      {/* mini swatches */}
+      <div style={{ display: 'flex', gap: 18, marginTop: 28, flexWrap: 'wrap' }}>
+        {[
+          { l: 'Primary', c: '#185FA5' },
+          { l: 'Hero', c: '#042C53' },
+          { l: 'Accent', c: '#D85A30' },
+          { l: 'Safe', c: '#EAF3DE', fg: '#27500A' },
+          { l: 'Watch', c: '#FAEEDA', fg: '#633806' },
+          { l: 'Risk', c: '#FCEBEB', fg: '#501313' },
+        ].map(s => (
+          <div key={s.l} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 22, height: 22, borderRadius: 6, background: s.c, border: '0.5px solid rgba(0,0,0,0.08)' }} />
+            <div style={{ fontSize: 12, color: '#5a5a5d' }}>{s.l}</div>
+            <div style={{ fontSize: 11, color: '#9a9a9d', fontFamily: "'JetBrains Mono', monospace" }}>{s.c}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Web app artboard ----------
+function WebArtboard() {
+  return (
+    <DCArtboard label="Web · Faculty / HoD dashboard — 1440×900" width={1440} height={900} style={{ borderRadius: 12 }}>
+      {/* browser chrome */}
+      <div style={{
+        height: 38, background: '#ececec', borderBottom: '0.5px solid rgba(0,0,0,0.1)',
+        display: 'flex', alignItems: 'center', padding: '0 14px', gap: 10,
+      }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {['#ff5f57', '#ffbd2e', '#28c840'].map(c => (
+            <div key={c} style={{ width: 11, height: 11, borderRadius: 999, background: c }} />
+          ))}
+        </div>
+        <div style={{
+          flex: 1, maxWidth: 460, margin: '0 auto',
+          background: '#fff', borderRadius: 6, padding: '4px 10px',
+          fontSize: 11, color: '#5a5a5d', fontFamily: "'JetBrains Mono', monospace",
+          border: '0.5px solid rgba(0,0,0,0.08)',
+        }}>app.attendly.in / dashboard</div>
+      </div>
+      <div style={{ height: 862, overflow: 'hidden' }}>
+        <WebApp />
+      </div>
+    </DCArtboard>
+  );
+}
+
+// ---------- Root ----------
+function App() {
+  return (
+    <DesignCanvas>
+      <Cover />
+
+      <DCSection
+        title="Mobile · Student"
+        subtitle="Home, subject detail, timetable, updates, communities, profile. Hero answers the decision, not the data."
+      >
+        <Phone label="01 · Home"><StudentHome /></Phone>
+        <Phone label="02 · Subject detail (skip calculator)"><SubjectDetail /></Phone>
+        <Phone label="03 · Weekly timetable"><Timetable /></Phone>
+        <Phone label="04 · University updates"><Updates /></Phone>
+        <Phone label="05 · Communities"><Communities /></Phone>
+        <Phone label="06 · Profile"><Profile /></Phone>
+        <Phone label="07 · Request leave"><LeaveRequest /></Phone>
+        <DCPostIt top={-80} left={260} rotate={-3} width={200}>
+          Hero card is the whole product in one tap — big number, chip, decision sentence.
+        </DCPostIt>
+      </DCSection>
+
+      <DCSection
+        title="Mobile · Faculty"
+        subtitle="One-tap marking: default all-present, tap only the absentees. Queues offline; syncs later."
+      >
+        <Phone label="08 · Mark attendance"><FacultyMarkAttendance /></Phone>
+        <DCPostIt top={-70} left={200} rotate={2} width={220}>
+          &ldquo;Offline · queued&rdquo; pill is honest — campus Wi-Fi fails constantly, the app shouldn't pretend otherwise.
+        </DCPostIt>
+      </DCSection>
+
+      <DCSection
+        title="Web · HoD &amp; faculty"
+        subtitle="Desktop is where the institution lives: department averages, at-risk cohort, and quiet accreditation exports."
+      >
+        <WebArtboard />
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Attendly",
+    "slug": "attendly",
+    "scheme": "attendly",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.attendly.app"
+    },
+    "android": {
+      "package": "com.attendly.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font"
+    ],
+    "extra": {
+      "appwriteEndpoint": "https://cloud.appwrite.io/v1",
+      "appwriteProjectId": "",
+      "appwriteDatabaseId": "",
+      "router": {},
+      "eas": {
+        "projectId": "233ccd95-398b-4000-aa33-25a4ec819d0e"
+      }
+    }
+  }
+}
