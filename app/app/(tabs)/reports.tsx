@@ -12,12 +12,7 @@ import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 
-const exports = [
-  { label: 'Course attendance', sub: 'CSV · all subjects', bg: colors.blue50, fg: colors.blue900 },
-  { label: 'At-risk cohort', sub: 'PDF · below 75%', bg: colors.coral50, fg: colors.coral900 },
-  { label: 'Monthly summary', sub: 'PDF · April', bg: '#fff', fg: colors.ink900, bordered: true },
-  { label: 'NAAC attainment', sub: 'XLSX · OBE ready', bg: '#fff', fg: colors.ink900, bordered: true },
-];
+// exports const removed as it was broken
 
 const teacherReports = [
   { id: 'rollList', title: 'Student Roll List', actionText: 'Download Report', type: 'download', color: colors.coral600 },
@@ -72,9 +67,12 @@ export default function Reports() {
         setCourseDurations(cds);
         if (cds.length > 0) setSelectedCD(cds[0]);
       });
-    }
-    if (role === 'admin') {
+    } else if (role === 'admin' && user) {
       getDepartmentAttendanceSummary().then(setSummaries);
+      listCourseDurations().then(cds => {
+        setCourseDurations(cds);
+        if (cds.length > 0) setSelectedCD(cds[0]);
+      });
     }
   }, [role, user]);
 
@@ -107,8 +105,8 @@ export default function Reports() {
         link.click();
         document.body.removeChild(link);
       } else {
-        const fileUri = FileSystem.documentDirectory + 'Department_Attendance_Report.csv';
-        await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
+        const fileUri = (FileSystem as any).documentDirectory + 'Department_Attendance_Report.csv';
+        await (FileSystem as any).writeAsStringAsync(fileUri, csvContent, { encoding: (FileSystem as any).EncodingType.UTF8 });
         
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(fileUri);
@@ -166,14 +164,9 @@ export default function Reports() {
     }
   };
 
-  if (role === 'teacher') {
-    return (
-      <ScrollView style={{ flex: 1, backgroundColor: colors.surfaceAlt }} contentContainerStyle={[{ paddingTop: insets.top + space.lg, paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: space.lg }, isDesktop && { maxWidth: 720, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32 }]}>
-        <View>
-          <Eyebrow>Faculty Reports</Eyebrow>
-          <Text style={styles.h1}>Downloads & Exports</Text>
-        </View>
-
+  // Shared Report Generator UI
+  const ReportGenerator = (
+    <>
         <View>
           <Eyebrow>1. Select Course/Batch</Eyebrow>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm, marginTop: space.sm }}>
@@ -185,7 +178,7 @@ export default function Reports() {
               </TouchableOpacity>
             ))}
             {courseDurations.length === 0 && (
-              <Text style={{ fontFamily: fonts.sans, color: colors.ink500 }}>No classes assigned to you.</Text>
+              <Text style={{ fontFamily: fonts.sans, color: colors.ink500 }}>No classes found.</Text>
             )}
           </ScrollView>
         </View>
@@ -211,6 +204,17 @@ export default function Reports() {
             ))}
           </Card>
         </View>
+    </>
+  );
+
+  if (role === 'teacher') {
+    return (
+      <ScrollView style={{ flex: 1, backgroundColor: colors.surfaceAlt }} contentContainerStyle={[{ paddingTop: insets.top + space.lg, paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: space.lg }, isDesktop && { maxWidth: 720, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32 }]}>
+        <View>
+          <Eyebrow>Faculty Reports</Eyebrow>
+          <Text style={styles.h1}>Downloads & Exports</Text>
+        </View>
+        {ReportGenerator}
       </ScrollView>
     );
   }
@@ -223,20 +227,15 @@ export default function Reports() {
         <Text style={styles.h1}>Reports</Text>
       </View>
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
-        {exports.map((e, index) => (
-          <TouchableOpacity 
-            key={e.label} 
-            style={[styles.exportCard, { backgroundColor: e.bg, borderWidth: e.bordered ? 0.5 : 0, borderColor: colors.border }]}
-            onPress={index === 0 ? handleExport : undefined}
-          >
-            <Text style={[styles.exportIcon, { color: e.fg }]}>↓</Text>
-            <Text style={[styles.exportLabel, { color: e.fg }]}>{e.label}</Text>
-            <Text style={[styles.exportSub, { color: e.fg, opacity: 0.75 }]}>{e.sub}</Text>
-          </TouchableOpacity>
-        ))}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+         <Eyebrow>Global Department Attendance</Eyebrow>
+         <TouchableOpacity onPress={handleExport} style={styles.saveBtn}>
+           <Text style={{ color: '#fff', fontSize: 12, fontFamily: fonts.sansMedium }}>Download CSV</Text>
+         </TouchableOpacity>
       </View>
       
+      {ReportGenerator}
+
       <View>
         <Eyebrow>Global Settings</Eyebrow>
         <View style={{ height: space.sm }} />

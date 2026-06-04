@@ -79,8 +79,8 @@ export default function AdminHome() {
         link.click();
         document.body.removeChild(link);
       } else {
-        const fileUri = FileSystem.documentDirectory + 'Department_Attendance_Report.csv';
-        await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
+        const fileUri = (FileSystem as any).documentDirectory + 'Department_Attendance_Report.csv';
+        await (FileSystem as any).writeAsStringAsync(fileUri, csvContent, { encoding: (FileSystem as any).EncodingType.UTF8 });
         
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(fileUri);

@@ -65,18 +65,12 @@ export default function EditAttendanceScreen() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Bulk update via Supabase UPSERT
-      const byDate: Record<string, typeof entries> = {};
-      entries.forEach(e => {
-        const date = e.attendanceRecords?.sessionDate || 'Unknown Date';
-        if (!byDate[date]) byDate[date] = [];
-        byDate[date].push(e);
-      });
+
 
       const rowsToUpdate = entries.map(e => ({
         id: e.id,
-        attendance_record_id: e.attendanceRecordId,
-        student_id: e.studentId,
+        attendance_record_id: (e as any).attendance_record_id || e.attendanceRecordId,
+        student_id: (e as any).student_id || e.studentId,
         status: e.status
       }));
 
@@ -120,7 +114,7 @@ export default function EditAttendanceScreen() {
             {records.map(rec => (
               <TouchableOpacity key={rec.id} onPress={() => setSelectedRecordId(rec.id)} style={[styles.tabBtn, selectedRecordId === rec.id && styles.tabBtnActive]}>
                 <Text style={[styles.tabBtnText, selectedRecordId === rec.id && styles.tabBtnTextActive]}>
-                  {new Date(rec.session_date).toLocaleDateString()} {rec.topic ? `- ${rec.topic}` : ''}
+                  {new Date((rec as any).session_date || rec.sessionDate || '').toLocaleDateString()} {rec.topic ? `- ${rec.topic}` : ''}
                 </Text>
               </TouchableOpacity>
             ))}

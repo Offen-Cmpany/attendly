@@ -153,7 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <Ctx.Provider value={{
-      user, profile, loading, role, designation,
+      user, profile, loading, role, designation: designation || undefined,
       completeOnboarding,
       signIn, signUp, signOut, refresh,
     }}>

@@ -14,8 +14,8 @@ export async function downloadCsv(csvContent: string, fileName: string) {
     link.click();
     document.body.removeChild(link);
   } else {
-    const fileUri = FileSystem.documentDirectory + fileName;
-    await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
+    const fileUri = (FileSystem as any).documentDirectory + fileName;
+    await (FileSystem as any).writeAsStringAsync(fileUri, csvContent, { encoding: (FileSystem as any).EncodingType.UTF8 });
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(fileUri);
     } else {
@@ -125,10 +125,17 @@ export async function generateAttendancePivotCsv(courseDurationId: string, cours
 
 // 4. Consolidated Statement of Internal Marks
 export async function generateConsolidatedMarksCsv(courseDurationId: string, courseName: string, totalSeries: number) {
+  const { data: cd } = await supabase.from('course_durations').select('course_code, batch_id').eq('id', courseDurationId).single();
+  if (!cd) throw new Error('Course duration not found');
+  
+  const { data: course } = await supabase.from('courses').select('id').eq('code', cd.course_code).single();
+  if (!course) throw new Error('Course reference not found for this duration');
+
   const { data: marks, error } = await supabase
     .from('marks')
     .select('student_id, series_number, marks_obtained, max_marks, profiles!inner(name, reg)')
-    .eq('course_duration_id', courseDurationId);
+    .eq('course_id', course.id)
+    .eq('batch_id', cd.batch_id);
   
   if (error) throw error;
   if (!marks || marks.length === 0) throw new Error('No internal marks found for this course.');
@@ -346,7 +353,7 @@ export async function generateAttendanceShortageWarningCsv(batchId: string, batc
   const headers = ['Register Number', 'Name', 'Email', 'Overall Percentage', 'Status'];
   const rows = Object.values(studentMap)
     .filter(s => s.total > 0 && (s.present / s.total) < 0.75)
-    .sort((a, b) => (s.present / s.total) - 0)
+    .sort((a, b) => (a.present / a.total) - (b.present / b.total))
     .map(s => [
       s.reg || '',
       `"${s.name}"`,

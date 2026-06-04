@@ -58,7 +58,7 @@ export default function MarkAttendance() {
     try {
       const entries = students.map(s => ({
         studentId: s.id,
-        status: absent.has(s.id) ? 'absent' : 'present' as const,
+        status: (absent.has(s.id) ? 'absent' : 'present') as 'present' | 'absent',
       }));
       await saveAttendanceSession(courseDuration.id, user.id, entries, { topic, deliveryMethod });
       router.back();

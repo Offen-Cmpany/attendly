@@ -100,7 +100,7 @@ export default function StudentHome() {
             {totalSessions > 0 ? (
               <Chip 
                 label={overallPercentage >= 75 ? 'Safe' : overallPercentage >= 65 ? 'Warning' : 'Critical'} 
-                variant={overallPercentage >= 75 ? 'safe' : overallPercentage >= 65 ? 'info' : 'risk'} 
+                variant={overallPercentage >= 75 ? 'safe' : overallPercentage >= 65 ? 'warn' : 'risk'} 
                 dot 
               />
             ) : (
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: space.md,
     borderWidth: hairline,
-    borderColor: colors.riskBorder,
+    borderColor: colors.coral200,
   },
   warningBannerEmoji: { fontSize: 24 },
   warningBannerTitle: { fontFamily: fonts.sansMedium, fontSize: 14, color: colors.riskFg },
