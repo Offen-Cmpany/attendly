@@ -125,16 +125,13 @@ export async function generateAttendancePivotCsv(courseDurationId: string, cours
 
 // 4. Consolidated Statement of Internal Marks
 export async function generateConsolidatedMarksCsv(courseDurationId: string, courseName: string, totalSeries: number) {
-  const { data: cd } = await supabase.from('course_durations').select('course_code, batch_id').eq('id', courseDurationId).single();
+  const { data: cd } = await supabase.from('course_durations').select('batch_id').eq('id', courseDurationId).single();
   if (!cd) throw new Error('Course duration not found');
-  
-  const { data: course } = await supabase.from('courses').select('id').eq('code', cd.course_code).single();
-  if (!course) throw new Error('Course reference not found for this duration');
 
   const { data: marks, error } = await supabase
     .from('marks')
     .select('student_id, series_number, marks_obtained, max_marks, profiles!inner(name, reg)')
-    .eq('course_id', course.id)
+    .eq('course_duration_id', courseDurationId)
     .eq('batch_id', cd.batch_id);
   
   if (error) throw error;

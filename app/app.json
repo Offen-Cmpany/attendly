@@ -36,9 +36,6 @@
       "expo-font"
     ],
     "extra": {
-      "appwriteEndpoint": "https://cloud.appwrite.io/v1",
-      "appwriteProjectId": "",
-      "appwriteDatabaseId": "",
       "router": {},
       "eas": {
         "projectId": "233ccd95-398b-4000-aa33-25a4ec819d0e"

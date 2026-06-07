@@ -105,7 +105,7 @@ function mapModule(row: any): Module {
 export type ExamMark = {
   id: string;
   studentId: string;
-  courseId: string;
+  courseDurationId: string;
   batchId: string;
   seriesNumber: number;
   marksObtained: number;
@@ -116,7 +116,7 @@ function mapExamMark(row: any): ExamMark {
   return {
     id: row.id,
     studentId: row.student_id,
-    courseId: row.course_id,
+    courseDurationId: row.course_duration_id,
     batchId: row.batch_id,
     seriesNumber: row.series_number,
     marksObtained: row.marks_obtained,
@@ -237,31 +237,31 @@ export async function getSettings(): Promise<Setting> {
 }
 
 // ─── Marks ───────────────────────────────────────────────────────
-export async function listMarks(filter?: { studentId?: string; courseId?: string }): Promise<ExamMark[]> {
+export async function listMarks(filter?: { studentId?: string; courseDurationId?: string }): Promise<ExamMark[]> {
   let query = supabase.from('marks').select('*').limit(100);
   if (filter?.studentId) query = query.eq('student_id', filter.studentId);
-  if (filter?.courseId) query = query.eq('course_id', filter.courseId);
+  if (filter?.courseDurationId) query = query.eq('course_duration_id', filter.courseDurationId);
   const { data } = await query;
   return (data || []).map(mapExamMark);
 }
 
 export async function saveMarks(
   batchId: string,
-  courseId: string,
+  courseDurationId: string,
   seriesNumber: number,
   maxMarks: number,
   entries: { studentId: string; marksObtained: number }[]
 ): Promise<void> {
   const rows = entries.map(e => ({
     student_id: e.studentId,
-    course_id: courseId,
+    course_duration_id: courseDurationId,
     batch_id: batchId,
     series_number: seriesNumber,
     marks_obtained: e.marksObtained,
     max_marks: maxMarks
   }));
 
-  const { error } = await supabase.from('marks').upsert(rows, { onConflict: 'student_id,course_id,series_number' });
+  const { error } = await supabase.from('marks').upsert(rows, { onConflict: 'student_id,course_duration_id,series_number' });
   if (error) throw new Error(error.message || 'Failed to save marks');
 }
 

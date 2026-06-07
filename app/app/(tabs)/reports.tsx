@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ScrollView, View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator, useWindowDimensions } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, Chip, Eyebrow, Progress } from '../../src/components/atoms';
 import { colors, fonts, radius, space, hairline } from '../../src/theme';
 import { status } from '../../src/lib/attendance';
 import { useAuth } from '../../src/lib/auth';
-import { getSettings, listMarks, listCourses, listProfiles, ExamMark, Course, Profile, getDepartmentAttendanceSummary, DeptAttendanceSummary, listCourseDurations, CourseDuration } from '../../src/lib/db';
+import { getSettings, getDepartmentAttendanceSummary, DeptAttendanceSummary, listCourseDurations, CourseDuration } from '../../src/lib/db';
 import { generateRollListCsv, generateConsolidatedAttendanceCsv, generateAttendancePivotCsv, generateConsolidatedMarksCsv, generateAbsenteesListCsv, generateStudentsBelow75Csv, generateCourseWiseAttendanceSummaryCsv, generateSessionalAttendanceCsv, generateAttendanceShortageWarningCsv, generateUniversityExamResultAnalysisCsv, generatePOAttainmentCsv } from '../../src/lib/reports';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -54,7 +54,6 @@ export default function Reports() {
   // Teacher state
   const [courseDurations, setCourseDurations] = useState<CourseDuration[]>([]);
   const [selectedCD, setSelectedCD] = useState<CourseDuration | null>(null);
-  const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState({ totalSeriesExams: 2 });
 
   useEffect(() => {

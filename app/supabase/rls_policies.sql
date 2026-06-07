@@ -16,6 +16,16 @@ CREATE OR REPLACE FUNCTION get_my_role() RETURNS text AS $$
   SELECT role FROM public.profiles WHERE id = auth.uid();
 $$ LANGUAGE sql SECURITY DEFINER;
 
+-- Helper function to get the current user's admin designation
+CREATE OR REPLACE FUNCTION get_my_designation() RETURNS text AS $$
+  SELECT designation FROM public.profiles WHERE id = auth.uid();
+$$ LANGUAGE sql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION is_admin_user() RETURNS boolean AS $$
+  SELECT get_my_role() = 'admin'
+    AND get_my_designation() IN ('hod', 'principal', 'office_staff');
+$$ LANGUAGE sql SECURITY DEFINER;
+
 -- 1. Profiles
 -- Everyone can read profiles (needed for dropdowns, class lists)
 CREATE POLICY "Profiles are viewable by all users" 
@@ -35,12 +45,12 @@ CREATE POLICY "Core data viewable by all" ON course_outcomes FOR SELECT TO authe
 CREATE POLICY "Core data viewable by all" ON co_po_mapping FOR SELECT TO authenticated USING (true);
 
 -- Only Admins can modify core academic data
-CREATE POLICY "Admins can insert batches" ON batches FOR INSERT TO authenticated WITH CHECK (get_my_role() IN ('hod', 'principal', 'office'));
-CREATE POLICY "Admins can update batches" ON batches FOR UPDATE TO authenticated USING (get_my_role() IN ('hod', 'principal', 'office'));
-CREATE POLICY "Admins can delete batches" ON batches FOR DELETE TO authenticated USING (get_my_role() IN ('hod', 'principal', 'office'));
+CREATE POLICY "Admins can insert batches" ON batches FOR INSERT TO authenticated WITH CHECK (is_admin_user());
+CREATE POLICY "Admins can update batches" ON batches FOR UPDATE TO authenticated USING (is_admin_user());
+CREATE POLICY "Admins can delete batches" ON batches FOR DELETE TO authenticated USING (is_admin_user());
 
-CREATE POLICY "Admins can modify courses" ON courses FOR ALL TO authenticated USING (get_my_role() IN ('hod', 'principal', 'office'));
-CREATE POLICY "Admins can modify course_durations" ON course_durations FOR ALL TO authenticated USING (get_my_role() IN ('hod', 'principal', 'office'));
+CREATE POLICY "Admins can modify courses" ON courses FOR ALL TO authenticated USING (is_admin_user());
+CREATE POLICY "Admins can modify course_durations" ON course_durations FOR ALL TO authenticated USING (is_admin_user());
 
 -- 3. Attendance Records (The session metadata)
 -- Anyone can view
@@ -54,7 +64,7 @@ WITH CHECK (
     SELECT 1 FROM course_durations 
     WHERE id = attendance_records.course_duration_id 
     AND faculty_id = auth.uid()
-  ) OR get_my_role() IN ('hod', 'principal')
+  ) OR is_admin_user()
 );
 
 CREATE POLICY "Teachers can update records for their classes" ON attendance_records 
@@ -64,7 +74,7 @@ USING (
     SELECT 1 FROM course_durations 
     WHERE id = attendance_records.course_duration_id 
     AND faculty_id = auth.uid()
-  ) OR get_my_role() IN ('hod', 'principal')
+  ) OR is_admin_user()
 );
 
 -- 4. Attendance Entries (The actual present/absent data per student)
@@ -83,7 +93,7 @@ USING (
     SELECT 1 FROM attendance_records r
     JOIN course_durations cd ON cd.id = r.course_duration_id
     WHERE r.id = attendance_entries.attendance_record_id
-    AND (cd.faculty_id = auth.uid() OR get_my_role() IN ('hod', 'principal'))
+    AND (cd.faculty_id = auth.uid() OR is_admin_user())
   )
 );
 
@@ -97,7 +107,7 @@ CREATE POLICY "Teachers modify marks" ON marks FOR ALL TO authenticated USING (
   EXISTS (
     SELECT 1 FROM course_durations 
     WHERE id = marks.course_duration_id 
-    AND (faculty_id = auth.uid() OR get_my_role() IN ('hod', 'principal'))
+    AND (faculty_id = auth.uid() OR is_admin_user())
   )
 );
 
@@ -105,6 +115,6 @@ CREATE POLICY "Teachers modify uni marks" ON university_marks FOR ALL TO authent
   EXISTS (
     SELECT 1 FROM course_durations 
     WHERE id = university_marks.course_duration_id 
-    AND (faculty_id = auth.uid() OR get_my_role() IN ('hod', 'principal'))
+    AND (faculty_id = auth.uid() OR is_admin_user())
   )
 );

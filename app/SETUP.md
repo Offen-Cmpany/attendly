@@ -1,82 +1,67 @@
-# Appwrite setup
+# Supabase setup
 
-This app expects an Appwrite project with one database and the collections below. Fill the IDs in `app.json` → `extra`.
+This app uses Supabase for authentication, PostgreSQL data storage, and Row Level Security.
 
 ## 1. Project
 
-1. Create a project at https://cloud.appwrite.io (or self-host).
-2. Add a **Web** platform with hostname `localhost` (and your prod domain).
-3. Add **Android** + **iOS** platforms with package id `com.attendly.app`.
-4. Copy the project ID into `app.json` → `extra.appwriteProjectId`.
+1. Create a project at https://supabase.com.
+2. Copy the project URL and anon public key from Project Settings -> API.
+3. Add them to `app/.env`:
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=your_project_url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+```
+
+The app reads these values in `src/lib/supabase.ts`.
 
 ## 2. Database
 
-Create a database (e.g. `attendly`). Copy its ID into `app.json` → `extra.appwriteDatabaseId`.
+Create the required tables in your Supabase database before running the app. The current app expects these core tables:
 
-## 3. Collections
+- `profiles`
+- `batches`
+- `courses`
+- `course_durations`
+- `attendance_records`
+- `attendance_entries`
+- `marks`
+- `program_outcomes`
+- `course_outcomes`
+- `co_po_mapping`
+- `university_marks`
+- `settings`
 
-Create these collections. Permissions: **Users (any logged-in)** can read; writes are documented per collection.
+Apply Row Level Security policies from `supabase/rls_policies.sql` after the schema is created.
 
-### `profiles`
-One row per user. Created on first sign-in.
+## 3. Auth and profiles
 
-| attribute | type           | required | notes                              |
-|-----------|----------------|----------|------------------------------------|
-| userId    | string (255)   | yes      | Appwrite account `$id` (indexed)   |
-| name      | string (120)   | yes      |                                    |
-| email     | email          | yes      |                                    |
-| role      | enum           | yes      | `student` \| `faculty`             |
-| reg       | string (40)    | no       | reg number / staff id              |
-| dept      | string (40)    | no       |                                    |
-| semester  | integer        | no       |                                    |
+Users sign in through Supabase Auth. On first sign-in, the app creates a row in `profiles` using the Supabase Auth user ID.
 
-Index: `userId` (unique). Create permission: any user. Update permission: document owner.
+Supported app roles:
 
-### `subjects`
-| attribute | type        | required |
-|-----------|-------------|----------|
-| code      | string(20)  | yes      |
-| name      | string(120) | yes      |
-| faculty   | string(40)  | yes      | userId of teaching faculty |
-| credits   | integer     | yes      |
-| semester  | integer     | yes      |
+- `student`
+- `teacher`
+- `admin`
 
-### `enrollments`
-| attribute | type       | required |
-|-----------|------------|----------|
-| userId    | string(40) | yes (idx)|
-| subjectId | string(40) | yes      |
+Admin designations are stored separately in `profiles.designation`:
 
-### `sessions`
-| attribute | type        | required |
-|-----------|-------------|----------|
-| subjectId | string(40)  | yes (idx)|
-| date      | datetime    | yes      |
-| hour      | string(10)  | yes      |
+- `hod`
+- `principal`
+- `office_staff`
+- `pending_staff`
 
-### `attendance`
-| attribute | type        | required | notes |
-|-----------|-------------|----------|-------|
-| sessionId | string(40)  | yes (idx)|       |
-| userId    | string(40)  | yes (idx)|       |
-| status    | enum        | yes      | `present` \| `absent` \| `duty` |
+## 4. Local development
 
-### `leaves`
-| attribute  | type        | required | notes |
-|------------|-------------|----------|-------|
-| userId     | string(40)  | yes (idx)|       |
-| userName   | string(120) | yes      | denormalized for list view |
-| reg        | string(40)  | no       |       |
-| subjectId  | string(40)  | no       |       |
-| type       | enum        | yes      | `duty` \| `medical` \| `personal` \| `other` |
-| reason     | string(500) | yes      |       |
-| fromDate   | datetime    | yes      |       |
-| toDate     | datetime    | yes      |       |
-| status     | enum        | yes      | `pending` \| `approved` \| `declined` |
-| reviewedBy | string(40)  | no       |       |
+Install dependencies and start Expo:
 
-Permission: students can create their own; faculty can read all + update `status`/`reviewedBy`.
+```bash
+npm install
+npm start
+```
 
-## 4. Roles
+For web:
 
-For this scaffold, role is stored on the `profiles` doc and toggled from the Profile screen. In production, restrict who can flip to `faculty` (Appwrite team membership or server function).
+```bash
+npm run web
+```
