@@ -44,3 +44,9 @@ yarn-error.*
 /android
 *.csv
 demo_data/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
