@@ -5,7 +5,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { colors, fonts, spacing, radius, hairline } from '../theme';
 import { useAuth } from '../lib/auth';
 import { listCourseDurations, listAttendanceRecords, CourseDuration, AttendanceRecord } from '../lib/db';
-import { Card, Eyebrow } from '../components/atoms';
+import { Button, Card, Eyebrow } from '../components/atoms';
 
 export default function TeacherHome() {
   const { user, profile } = useAuth();
@@ -60,6 +60,15 @@ export default function TeacherHome() {
             <Text style={styles.heroSub}>Manage your classes and attendance</Text>
           </View>
         </TouchableOpacity>
+
+        <Card style={styles.eventCard}>
+          <View style={{ flex: 1 }}>
+            <Eyebrow>Community approvals</Eyebrow>
+            <Text style={styles.eventTitle}>Review student event proposals</Text>
+            <Text style={styles.eventSub}>Approve curated events, monitor registrations, and keep participation visible.</Text>
+          </View>
+          <Button title="Open Events" onPress={() => router.push('/(tabs)/events')} />
+        </Card>
 
         {/* Dashboard Stats */}
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg }}>
@@ -129,6 +138,9 @@ const styles = StyleSheet.create({
   },
   heroTitle: { fontFamily: fonts.display, fontSize: 22, color: '#fff' },
   heroSub: { fontFamily: fonts.sans, fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+  eventCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md, backgroundColor: colors.coral50, borderColor: colors.coral200 },
+  eventTitle: { fontFamily: fonts.sansMedium, fontSize: 16, color: colors.coral900, marginTop: spacing.xs },
+  eventSub: { fontFamily: fonts.sans, fontSize: 13, color: colors.coral800, marginTop: 4 },
 
   sectionTitle: {
     fontFamily: fonts.sansMedium,

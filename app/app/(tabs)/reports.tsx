@@ -206,6 +206,14 @@ export default function Reports() {
     </>
   );
 
+  if (role === 'student') {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontFamily: fonts.sansMedium, color: colors.ink500 }}>Access Denied</Text>
+      </View>
+    );
+  }
+
   if (role === 'teacher') {
     return (
       <ScrollView style={{ flex: 1, backgroundColor: colors.surfaceAlt }} contentContainerStyle={[{ paddingTop: insets.top + space.lg, paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: space.lg }, isDesktop && { maxWidth: 720, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32 }]}>

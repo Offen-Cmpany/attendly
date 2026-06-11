@@ -31,8 +31,12 @@ Create the required tables in your Supabase database before running the app. The
 - `co_po_mapping`
 - `university_marks`
 - `settings`
+- `communities`
+- `events`
+- `event_registrations`
 
 Apply Row Level Security policies from `supabase/rls_policies.sql` after the schema is created.
+Apply community and event workflow tables from `supabase/events_schema.sql` after the base profile/role helpers exist.
 
 ## 3. Auth and profiles
 

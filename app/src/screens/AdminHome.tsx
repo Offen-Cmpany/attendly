@@ -178,6 +178,7 @@ export default function AdminHome() {
             { emoji: '👥', label: 'Manage\nBatches', route: '/manage-batches' },
             { emoji: '📖', label: 'Manage\nCourses', route: '/manage-courses' },
             { emoji: '👤', label: 'Manage\nUsers', route: '/manage-users' },
+            { emoji: '✦', label: 'Review\nEvents', route: '/(tabs)/events' },
             { emoji: '🎯', label: 'Program\nOutcomes', route: '/manage-outcomes' },
             { emoji: '📋', label: 'Manage\nRoster', route: '/admin/manage-roster' },
             { emoji: '📥', label: 'Bulk\nImport', route: '/admin/import' },

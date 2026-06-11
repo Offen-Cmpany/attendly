@@ -43,6 +43,14 @@ export default function TabsLayout() {
         }}
       />
 
+      <Tabs.Screen
+        name="events"
+        options={{
+          title: 'Events',
+          tabBarIcon: ({ focused }) => <Icon label="✦" focused={focused} />,
+        }}
+      />
+
       {/* Classes — teacher only */}
       <Tabs.Screen
         name="classes"
@@ -60,6 +68,26 @@ export default function TabsLayout() {
           href: isAdmin ? '/manage' : null,
           title: 'Manage',
           tabBarIcon: ({ focused }) => <Icon label="⊞" focused={focused} />,
+        }}
+      />
+
+      {/* Reports — admin and teacher only */}
+      <Tabs.Screen
+        name="reports"
+        options={{
+          href: (isAdmin || isTeacher) ? '/reports' : null,
+          title: 'Reports',
+          tabBarIcon: ({ focused }) => <Icon label="📊" focused={focused} />,
+        }}
+      />
+
+      {/* Calendar — admin and teacher only */}
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          href: (isAdmin || isTeacher) ? '/calendar' : null,
+          title: 'Calendar',
+          tabBarIcon: ({ focused }) => <Icon label="📅" focused={focused} />,
         }}
       />
 

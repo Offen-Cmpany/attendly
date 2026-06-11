@@ -144,11 +144,112 @@ export type Community = {
   createdBy?: string;
 };
 
+export type EventStatus = 'pending_approval' | 'approved' | 'rejected' | 'published' | 'completed' | 'cancelled';
+export type RegistrationStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export type CommunityRecord = {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  facultyAdvisorId?: string;
+  isActive: boolean;
+};
+
+export type EventRecord = {
+  id: string;
+  communityId: string;
+  title: string;
+  description?: string;
+  location?: string;
+  startsAt: string;
+  endsAt?: string;
+  createdBy: string;
+  status: EventStatus;
+  requiresRegistrationApproval: boolean;
+  dutyLeaveEligible: boolean;
+  maxAttendees?: number | null;
+  approvalNote?: string | null;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  communityName?: string;
+  creatorName?: string;
+  registrationCount?: number;
+  approvedCount?: number;
+  myRegistrationStatus?: RegistrationStatus | null;
+};
+
+export type EventRegistration = {
+  id: string;
+  eventId: string;
+  studentId: string;
+  status: RegistrationStatus;
+  note?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+  studentName?: string;
+  studentEmail?: string;
+  studentReg?: string;
+};
+
 export type Setting = {
   id: string;
   totalSeriesExams: number;
   currentSemester: number;
 };
+
+function mapCommunityRecord(row: any): CommunityRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    category: row.category,
+    facultyAdvisorId: row.faculty_advisor_id,
+    isActive: row.is_active ?? true,
+  };
+}
+
+function mapEventRecord(row: any): EventRecord {
+  return {
+    id: row.id,
+    communityId: row.community_id,
+    title: row.title,
+    description: row.description,
+    location: row.location,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    createdBy: row.created_by,
+    status: row.status,
+    requiresRegistrationApproval: row.requires_registration_approval ?? false,
+    dutyLeaveEligible: row.duty_leave_eligible ?? false,
+    maxAttendees: row.max_attendees,
+    approvalNote: row.approval_note,
+    approvedBy: row.approved_by,
+    approvedAt: row.approved_at,
+    communityName: row.communities?.name,
+    creatorName: row.profiles?.name,
+    registrationCount: row.registration_count,
+    approvedCount: row.approved_count,
+    myRegistrationStatus: row.my_registration_status,
+  };
+}
+
+function mapEventRegistration(row: any): EventRegistration {
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    studentId: row.student_id,
+    status: row.status,
+    note: row.note,
+    reviewedBy: row.reviewed_by,
+    reviewedAt: row.reviewed_at,
+    createdAt: row.created_at,
+    studentName: row.profiles?.name,
+    studentEmail: row.profiles?.email,
+    studentReg: row.profiles?.reg,
+  };
+}
 
 // ─── Profiles ────────────────────────────────────────────────────
 export async function getProfileByUserId(userId: string): Promise<Profile | null> {
@@ -234,6 +335,197 @@ export async function getSettings(): Promise<Setting> {
   const { data, error } = await supabase.from('settings').select('*').eq('id', 'global').single();
   if (error || !data) return { id: 'global', totalSeriesExams: 2, currentSemester: 6 };
   return { id: data.id, totalSeriesExams: data.total_series_exams, currentSemester: data.current_semester };
+}
+
+// ─── Communities and Events ──────────────────────────────────────
+export async function listCommunities(): Promise<CommunityRecord[]> {
+  const { data, error } = await supabase
+    .from('communities')
+    .select('*')
+    .eq('is_active', true)
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('listCommunities error:', error);
+    return [];
+  }
+
+  return (data || []).map(mapCommunityRecord);
+}
+
+export async function listEvents(filter?: {
+  status?: EventStatus | EventStatus[];
+  createdBy?: string;
+  studentId?: string;
+  includePast?: boolean;
+}): Promise<EventRecord[]> {
+  let query = supabase
+    .from('events')
+    .select('*, communities(name), profiles(name)')
+    .order('starts_at', { ascending: true })
+    .limit(100);
+
+  if (filter?.createdBy) query = query.eq('created_by', filter.createdBy);
+  if (filter?.status) {
+    query = Array.isArray(filter.status)
+      ? query.in('status', filter.status)
+      : query.eq('status', filter.status);
+  }
+  if (!filter?.includePast) query = query.gte('starts_at', new Date().toISOString());
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('listEvents error:', error);
+    return [];
+  }
+
+  let events = (data || []).map(mapEventRecord);
+
+  if (filter?.studentId && events.length > 0) {
+    const eventIds = events.map(event => event.id);
+    const { data: registrations } = await supabase
+      .from('event_registrations')
+      .select('event_id, status')
+      .eq('student_id', filter.studentId)
+      .in('event_id', eventIds);
+
+    const registrationMap = new Map((registrations || []).map(reg => [reg.event_id, reg.status]));
+    events = events.map(event => ({
+      ...event,
+      myRegistrationStatus: registrationMap.get(event.id) ?? null,
+    }));
+  }
+
+  return events;
+}
+
+export async function listEventRegistrations(eventId: string): Promise<EventRegistration[]> {
+  const { data, error } = await supabase
+    .from('event_registrations')
+    .select('*, profiles(name, email, reg)')
+    .eq('event_id', eventId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('listEventRegistrations error:', error);
+    return [];
+  }
+
+  return (data || []).map(mapEventRegistration);
+}
+
+export async function getEventRegistrationSummary(eventIds: string[]): Promise<Record<string, { total: number; approved: number }>> {
+  if (eventIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('event_registrations')
+    .select('event_id, status')
+    .in('event_id', eventIds);
+
+  if (error) {
+    console.error('getEventRegistrationSummary error:', error);
+    return {};
+  }
+
+  const summary: Record<string, { total: number; approved: number }> = {};
+  for (const row of data || []) {
+    if (!summary[row.event_id]) summary[row.event_id] = { total: 0, approved: 0 };
+    summary[row.event_id].total += 1;
+    if (row.status === 'approved') summary[row.event_id].approved += 1;
+  }
+  return summary;
+}
+
+export async function createEventProposal(input: {
+  communityId: string;
+  createdBy: string;
+  title: string;
+  description: string;
+  location?: string;
+  startsAt: string;
+  endsAt?: string;
+  requiresRegistrationApproval?: boolean;
+  dutyLeaveEligible?: boolean;
+  maxAttendees?: number | null;
+}): Promise<EventRecord> {
+  const { data, error } = await supabase
+    .from('events')
+    .insert({
+      community_id: input.communityId,
+      created_by: input.createdBy,
+      title: input.title,
+      description: input.description,
+      location: input.location || null,
+      starts_at: input.startsAt,
+      ends_at: input.endsAt || null,
+      status: 'pending_approval',
+      requires_registration_approval: input.requiresRegistrationApproval ?? true,
+      duty_leave_eligible: input.dutyLeaveEligible ?? false,
+      max_attendees: input.maxAttendees ?? null,
+    })
+    .select('*, communities(name), profiles(name)')
+    .single();
+
+  if (error || !data) throw error || new Error('Failed to create event proposal');
+  return mapEventRecord(data);
+}
+
+export async function reviewEventProposal(input: {
+  eventId: string;
+  reviewerId: string;
+  status: 'approved' | 'rejected' | 'published';
+  note?: string;
+}): Promise<void> {
+  const payload: Record<string, any> = {
+    status: input.status,
+    approval_note: input.note || null,
+    approved_by: input.reviewerId,
+    approved_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from('events').update(payload).eq('id', input.eventId);
+  if (error) throw error;
+}
+
+export async function registerForEvent(input: {
+  eventId: string;
+  studentId: string;
+  note?: string;
+}): Promise<void> {
+  const { data: event, error: eventError } = await supabase
+    .from('events')
+    .select('requires_registration_approval')
+    .eq('id', input.eventId)
+    .single();
+
+  if (eventError || !event) throw eventError || new Error('Event not found');
+
+  const { error } = await supabase.from('event_registrations').upsert({
+    event_id: input.eventId,
+    student_id: input.studentId,
+    status: event.requires_registration_approval ? 'pending' : 'approved',
+    note: input.note || null,
+  }, { onConflict: 'event_id,student_id' });
+
+  if (error) throw error;
+}
+
+export async function reviewEventRegistration(input: {
+  registrationId: string;
+  reviewerId: string;
+  status: 'approved' | 'rejected';
+  note?: string;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('event_registrations')
+    .update({
+      status: input.status,
+      note: input.note || null,
+      reviewed_by: input.reviewerId,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq('id', input.registrationId);
+
+  if (error) throw error;
 }
 
 // ─── Marks ───────────────────────────────────────────────────────
@@ -434,6 +726,42 @@ export async function listAttendanceRecords(filter?: {
   const { data, error } = await query;
   if (error) { console.error('listAttendanceRecords error:', error); return []; }
   return (data || []).map(mapAttendanceRecord);
+}
+
+/** Fetch attendance records within a specific date range for Calendar view */
+export async function getAttendanceRecordsByDateRange(
+  startDate: string,
+  endDate: string,
+  facultyId?: string
+): Promise<Record<string, AttendanceRecord[]>> {
+  let query = supabase
+    .from('attendance_records')
+    .select('*, course_durations(course_code, course_name)')
+    .gte('session_date', startDate)
+    .lte('session_date', endDate)
+    .order('session_date', { ascending: true });
+
+  if (facultyId) {
+    query = query.eq('marked_by', facultyId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('getAttendanceRecordsByDateRange error:', error);
+    return {};
+  }
+
+  // Group by date ('YYYY-MM-DD')
+  const grouped: Record<string, AttendanceRecord[]> = {};
+  (data || []).forEach(row => {
+    const record = mapAttendanceRecord(row);
+    // session_date is timestamp, get date part only
+    const dateKey = record.sessionDate.split('T')[0];
+    if (!grouped[dateKey]) grouped[dateKey] = [];
+    grouped[dateKey].push(record);
+  });
+
+  return grouped;
 }
 
 /** Get attendance summary for a student: % per course_duration */

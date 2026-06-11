@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { ScrollView, View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, useWindowDimensions, Modal } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Button, Card, Chip, Eyebrow, Progress, Divider } from '../components/atoms';
 import { useAuth } from '../lib/auth';
 import { colors, fonts, radius, space, hairline } from '../theme';
@@ -9,6 +9,7 @@ import { getStudentAttendanceSummary, AttendanceSummary, getStudentAttendanceDet
 
 export default function StudentHome() {
   const { user, profile } = useAuth();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
@@ -117,6 +118,15 @@ export default function StudentHome() {
               ? `You have attended ${totalPresent} out of ${totalSessions} total sessions across all courses.` 
               : 'Attendance data will be populated once your faculty starts marking.'}
           </Text>
+        </Card>
+
+        <Card style={styles.eventCard}>
+          <View style={{ flex: 1 }}>
+            <Eyebrow>Community life</Eyebrow>
+            <Text style={styles.eventTitle}>Propose and join community events</Text>
+            <Text style={styles.eventSub}>Use the new events space to register for approved activities or pitch fresh ideas for approval.</Text>
+          </View>
+          <Button title="Open Events" onPress={() => router.push('/(tabs)/events')} />
         </Card>
 
         <View>
@@ -240,6 +250,9 @@ const styles = StyleSheet.create({
   warningBannerEmoji: { fontSize: 24 },
   warningBannerTitle: { fontFamily: fonts.sansMedium, fontSize: 14, color: colors.riskFg },
   warningBannerText: { fontFamily: fonts.sans, fontSize: 13, color: colors.riskFg, marginTop: 2, opacity: 0.9 },
+  eventCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, backgroundColor: colors.coral50, borderColor: colors.coral200 },
+  eventTitle: { fontSize: 16, fontFamily: fonts.sansMedium, color: colors.coral900, marginTop: space.xs },
+  eventSub: { fontSize: 13, fontFamily: fonts.sans, color: colors.coral800, marginTop: 4, lineHeight: 18 },
 
   heroLabel: { fontSize: 13, fontFamily: fonts.sans, color: colors.ink500 },
   heroRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm, marginTop: space.xs },
