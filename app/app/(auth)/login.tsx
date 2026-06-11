@@ -18,7 +18,7 @@ export default function Login() {
     setErrorMsg('');
     const trimmed = email.trim();
     if (!isCollegeEmail(trimmed)) {
-      setErrorMsg('Please use your college email (@cekottarakkara.ac.in)');
+      setErrorMsg('Please use your college email (@cek.ac.in or @cekottarakkara.ac.in)');
       return;
     }
     
@@ -71,7 +71,7 @@ export default function Login() {
           <View style={{ height: space.xl }} />
 
           {errorMsg ? (
-            <Text style={{ color: colors.red600, fontFamily: fonts.sansMedium, marginBottom: space.md, textAlign: 'center' }}>
+            <Text style={{ color: colors.coral600, fontFamily: fonts.sansMedium, marginBottom: space.md, textAlign: 'center' }}>
               {errorMsg}
             </Text>
           ) : null}

@@ -28,11 +28,11 @@ export function Eyebrow({ children }: { children: React.ReactNode }) {
 
 type BtnVariant = 'primary' | 'secondary' | 'accent' | 'ghost';
 export function Button({
-  title, onPress, variant = 'primary', size, style,
-}: { title: string; onPress?: () => void; variant?: BtnVariant; size?: 'sm'; style?: ViewStyle }) {
+  title, onPress, variant = 'primary', size, style, disabled
+}: { title: string; onPress?: () => void; variant?: BtnVariant; size?: 'sm'; style?: ViewStyle, disabled?: boolean }) {
   const v = btnStyles[variant];
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.btn, v.container, size === 'sm' && styles.btnSm, pressed && { opacity: 0.85 }, style]}>
+    <Pressable disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.btn, v.container, size === 'sm' && styles.btnSm, pressed && { opacity: 0.85 }, disabled && { opacity: 0.5 }, style]}>
       <Text style={[styles.btnText, v.text, size === 'sm' && { fontSize: 13 }]}>{title}</Text>
     </Pressable>
   );

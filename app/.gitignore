@@ -33,6 +33,7 @@ yarn-error.*
 # local env files
 .env
 .env.*
+!.env.example
 *.local
 
 # typescript
@@ -41,6 +42,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+*.csv
+demo_data/
 
 # wrangler files
 .wrangler

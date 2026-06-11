@@ -14,9 +14,8 @@ function Icon({ label, focused }: { label: string; focused: boolean }) {
 
 export default function TabsLayout() {
   const { role } = useAuth();
-  const isStudent = role === 'student';
-  const isTeacher = role === 'teacher';
   const isAdmin = role === 'admin';
+  const isTeacher = role === 'teacher';
 
   return (
     <Tabs
@@ -44,33 +43,21 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* Timetable — students & teachers only */}
       <Tabs.Screen
-        name="timetable"
+        name="events"
         options={{
-          href: isAdmin ? null : '/timetable',
-          title: 'Timetable',
-          tabBarIcon: ({ focused }) => <Icon label="▦" focused={focused} />,
+          title: 'Events',
+          tabBarIcon: ({ focused }) => <Icon label="✦" focused={focused} />,
         }}
       />
 
-      {/* Communities — students & teachers only */}
+      {/* Classes — teacher only */}
       <Tabs.Screen
-        name="communities"
+        name="classes"
         options={{
-          href: isAdmin ? null : '/communities',
-          title: 'Communities',
-          tabBarIcon: ({ focused }) => <Icon label="◇" focused={focused} />,
-        }}
-      />
-
-      {/* Forms — students only (teachers manage forms under subjects) */}
-      <Tabs.Screen
-        name="forms"
-        options={{
-          href: isStudent ? '/forms' : null,
-          title: 'Forms',
-          tabBarIcon: ({ focused }) => <Icon label="☰" focused={focused} />,
+          href: isTeacher ? '/classes' : null,
+          title: 'Subjects',
+          tabBarIcon: ({ focused }) => <Icon label="📚" focused={focused} />,
         }}
       />
 
@@ -84,23 +71,23 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* Approvals — teachers & admin */}
-      <Tabs.Screen
-        name="approvals"
-        options={{
-          href: isStudent ? null : '/approvals',
-          title: 'Approvals',
-          tabBarIcon: ({ focused }) => <Icon label="✓" focused={focused} />,
-        }}
-      />
-
-      {/* Reports — admin & teachers */}
+      {/* Reports — admin and teacher only */}
       <Tabs.Screen
         name="reports"
         options={{
-          href: isAdmin || isTeacher ? '/reports' : null,
+          href: (isAdmin || isTeacher) ? '/reports' : null,
           title: 'Reports',
-          tabBarIcon: ({ focused }) => <Icon label="◎" focused={focused} />,
+          tabBarIcon: ({ focused }) => <Icon label="📊" focused={focused} />,
+        }}
+      />
+
+      {/* Calendar — admin and teacher only */}
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          href: (isAdmin || isTeacher) ? '/calendar' : null,
+          title: 'Calendar',
+          tabBarIcon: ({ focused }) => <Icon label="📅" focused={focused} />,
         }}
       />
 

@@ -65,7 +65,7 @@ export default function Signup() {
           <View style={{ height: space.xl }} />
 
           {errorMsg ? (
-            <Text style={{ color: colors.red600, fontFamily: fonts.sansMedium, marginBottom: space.md, textAlign: 'center' }}>
+            <Text style={{ color: colors.coral600, fontFamily: fonts.sansMedium, marginBottom: space.md, textAlign: 'center' }}>
               {errorMsg}
             </Text>
           ) : null}

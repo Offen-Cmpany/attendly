@@ -1,17 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { ScrollView, View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, Chip, Eyebrow, Progress } from '../../src/components/atoms';
 import { colors, fonts, radius, space, hairline } from '../../src/theme';
 import { status } from '../../src/lib/attendance';
 import { useAuth } from '../../src/lib/auth';
-import { getSettings, listMarks, listCourses, listProfiles, ExamMark, Course, Profile } from '../../src/lib/db';
+import { getSettings, getDepartmentAttendanceSummary, DeptAttendanceSummary, listCourseDurations, CourseDuration } from '../../src/lib/db';
+import { generateRollListCsv, generateConsolidatedAttendanceCsv, generateAttendancePivotCsv, generateConsolidatedMarksCsv, generateAbsenteesListCsv, generateStudentsBelow75Csv, generateCourseWiseAttendanceSummaryCsv, generateSessionalAttendanceCsv, generateAttendanceShortageWarningCsv, generateUniversityExamResultAnalysisCsv, generatePOAttainmentCsv } from '../../src/lib/reports';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import { Platform } from 'react-native';
+import { useRouter } from 'expo-router';
 
-const exports = [
-  { label: 'Course attendance', sub: 'CSV · all subjects', bg: colors.blue50, fg: colors.blue900 },
-  { label: 'At-risk cohort', sub: 'PDF · below 75%', bg: colors.coral50, fg: colors.coral900 },
-  { label: 'Monthly summary', sub: 'PDF · April', bg: '#fff', fg: colors.ink900, bordered: true },
-  { label: 'NAAC attainment', sub: 'XLSX · OBE ready', bg: '#fff', fg: colors.ink900, bordered: true },
+// exports const removed as it was broken
+
+const teacherReports = [
+  { id: 'rollList', title: 'Student Roll List', actionText: 'Download Report', type: 'download', color: colors.coral600 },
+  { id: 'attendancePivot', title: 'Students Attendance Report (Student vs Date)', actionText: 'Configure & Download', type: 'configure', color: colors.blue600 },
+  { id: 'attendancePivotFull', title: 'Students Attendance Report (Student vs Date, Session, Course)', actionText: 'Configure & Download', type: 'configure', color: colors.blue600 },
+  { id: 'consolidated', title: 'Consolidated Statement of Course Attendance', actionText: 'Configure & Download', type: 'configure', color: colors.blue600 },
+  { id: 'progressCard', title: 'Students Individual Activity Report (Progress Card)', actionText: 'Configure & Download', type: 'configure', color: colors.blue600 },
+  { id: 'assessmentMarks', title: 'Statement of Assessment Marks With Result Analysis', actionText: 'Download Report', type: 'download', color: colors.coral600 },
+  { id: 'internalMarks', title: 'Consolidated Statement of Internal Marks', actionText: 'Configure & Download', type: 'configure', color: colors.blue600 },
+  { id: 'universityExams', title: 'University Exams Result Analysis', actionText: 'Configure & Download', type: 'configure', color: colors.blue600 },
+  { id: 'poAttainment', title: 'PO Attainment Report (Programme Batch)', actionText: 'Download Report', type: 'download', color: colors.coral600 },
+  { id: 'absentees', title: 'Absentees List (Date-wise)', actionText: 'Download Report', type: 'download', color: colors.coral600 },
+  { id: 'below75', title: 'Students Below 75% Attendance', actionText: 'Download Report', type: 'download', color: colors.coral600 },
+  { id: 'courseWise', title: 'Course-wise Attendance Summary (Batch)', actionText: 'Download Report', type: 'download', color: colors.coral600 },
+  { id: 'sessional', title: 'Sessional Attendance Report', actionText: 'Download Report', type: 'download', color: colors.coral600 },
+  { id: 'shortage', title: 'Attendance Shortage Warning (Batch)', actionText: 'Download Report', type: 'download', color: colors.coral600 },
+  { id: 'editAttendance', title: 'Edit Classes Attendance', actionText: 'View/Edit', type: 'view', color: colors.blue600 },
+  { id: 'monitoring', title: 'Attendance Monitoring', actionText: 'Configure & view', type: 'view', color: colors.blue600 },
 ];
 
 const subjectsStats = [
@@ -23,16 +42,18 @@ const subjectsStats = [
 export default function Reports() {
   const insets = useSafeAreaInsets();
   const { role, user } = useAuth();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
+  
+  const router = useRouter();
   
   // Admin state
   const [totalExams, setTotalExams] = useState('2');
+  const [summaries, setSummaries] = useState<DeptAttendanceSummary[]>([]);
   
   // Teacher state
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
-  const [students, setStudents] = useState<Profile[]>([]);
-  const [marks, setMarks] = useState<ExamMark[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [courseDurations, setCourseDurations] = useState<CourseDuration[]>([]);
+  const [selectedCD, setSelectedCD] = useState<CourseDuration | null>(null);
   const [settings, setSettings] = useState({ totalSeriesExams: 2 });
 
   useEffect(() => {
@@ -41,100 +62,187 @@ export default function Reports() {
       setTotalExams(s.totalSeriesExams.toString());
     });
     if (role === 'teacher' && user) {
-      listCourses({ teacherId: user.id }).then(c => {
-        setCourses(c);
-        if (c.length > 0) setSelectedCourse(c[0].id);
+      listCourseDurations({ facultyId: user.id }).then(cds => {
+        setCourseDurations(cds);
+        if (cds.length > 0) setSelectedCD(cds[0]);
+      });
+    } else if (role === 'admin' && user) {
+      getDepartmentAttendanceSummary().then(setSummaries);
+      listCourseDurations().then(cds => {
+        setCourseDurations(cds);
+        if (cds.length > 0) setSelectedCD(cds[0]);
       });
     }
   }, [role, user]);
 
-  useEffect(() => {
-    if (role === 'teacher' && selectedCourse) {
-      setLoading(true);
-      const course = courses.find(c => c.id === selectedCourse);
-      if (course && course.batchIds && course.batchIds.length > 0) {
-        Promise.all([
-          listProfiles({ batchId: course.batchIds[0] }),
-          listMarks({ courseId: selectedCourse })
-        ]).then(([profs, mks]) => {
-          setStudents(profs);
-          setMarks(mks);
-          setLoading(false);
-        });
-      } else {
-        setStudents([]);
-        setMarks([]);
-        setLoading(false);
-      }
+  const handleExport = async () => {
+    if (summaries.length === 0) {
+      if (Platform.OS === 'web') window.alert('There is no attendance data to export.');
+      else Alert.alert('No data', 'There is no attendance data to export.');
+      return;
     }
-  }, [selectedCourse, role, courses]);
+
+    try {
+      const headers = ['Course Code', 'Course Name', 'Faculty', 'Total Sessions', 'Avg Attendance %'];
+      const rows = summaries.map(s => [
+        s.courseCode,
+        `"${s.courseName}"`, 
+        `"${s.facultyName}"`,
+        s.totalSessions,
+        s.avgAttendance
+      ]);
+
+      const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+
+      if (Platform.OS === 'web') {
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'Department_Attendance_Report.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        const fileUri = (FileSystem as any).documentDirectory + 'Department_Attendance_Report.csv';
+        await (FileSystem as any).writeAsStringAsync(fileUri, csvContent, { encoding: (FileSystem as any).EncodingType.UTF8 });
+        
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri);
+        } else {
+          Alert.alert('Sharing not available', 'Cannot export file on this device.');
+        }
+      }
+    } catch (e) {
+      console.error('Export failed:', e);
+      if (Platform.OS === 'web') window.alert('Failed to generate report.');
+      else Alert.alert('Error', 'Failed to generate report.');
+    }
+  };
+
+  const handleTeacherReport = async (reportId: string) => {
+    if (!selectedCD) {
+      Alert.alert('Please select a course');
+      return;
+    }
+
+    try {
+      if (reportId === 'rollList') {
+        await generateRollListCsv(selectedCD.batchId, selectedCD.batchName || 'Batch');
+      } else if (reportId === 'attendancePivot') {
+        await generateAttendancePivotCsv(selectedCD.id, selectedCD.courseName);
+      } else if (reportId === 'attendancePivotFull') {
+        await generateAttendancePivotCsv(selectedCD.id, selectedCD.courseName + '_Full');
+      } else if (reportId === 'consolidated') {
+        await generateConsolidatedAttendanceCsv(selectedCD.id, selectedCD.courseName);
+      } else if (reportId === 'progressCard' || reportId === 'assessmentMarks' || reportId === 'internalMarks') {
+        await generateConsolidatedMarksCsv(selectedCD.id, selectedCD.courseName, settings.totalSeriesExams);
+      } else if (reportId === 'absentees') {
+        await generateAbsenteesListCsv(selectedCD.id, selectedCD.courseName);
+      } else if (reportId === 'below75') {
+        await generateStudentsBelow75Csv(selectedCD.id, selectedCD.courseName);
+      } else if (reportId === 'courseWise') {
+        await generateCourseWiseAttendanceSummaryCsv(selectedCD.batchId, selectedCD.batchName || 'Batch');
+      } else if (reportId === 'sessional') {
+        await generateSessionalAttendanceCsv(selectedCD.id, selectedCD.courseName);
+      } else if (reportId === 'shortage') {
+        await generateAttendanceShortageWarningCsv(selectedCD.batchId, selectedCD.batchName || 'Batch');
+      } else if (reportId === 'universityExams') {
+        await generateUniversityExamResultAnalysisCsv(selectedCD.id, selectedCD.courseName);
+      } else if (reportId === 'poAttainment') {
+        await generatePOAttainmentCsv(selectedCD.id, selectedCD.courseName);
+      } else if (reportId === 'editAttendance') {
+        router.push(`/edit-attendance/${selectedCD.id}` as any);
+      } else {
+        if (Platform.OS === 'web') window.alert('This report is not yet implemented.');
+        else Alert.alert('Coming Soon', 'This report is not yet implemented.');
+      }
+    } catch (e: any) {
+      if (Platform.OS === 'web') window.alert(e.message || 'Error generating report');
+      else Alert.alert('Error', e.message || 'Error generating report');
+    }
+  };
+
+  // Shared Report Generator UI
+  const ReportGenerator = (
+    <>
+        <View>
+          <Eyebrow>1. Select Course/Batch</Eyebrow>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm, marginTop: space.sm }}>
+            {courseDurations.map(cd => (
+              <TouchableOpacity key={cd.id} onPress={() => setSelectedCD(cd)} style={[styles.tabBtn, selectedCD?.id === cd.id && styles.tabBtnActive]}>
+                <Text style={[styles.tabBtnText, selectedCD?.id === cd.id && styles.tabBtnTextActive]}>
+                  {cd.courseName} ({cd.batchName})
+                </Text>
+              </TouchableOpacity>
+            ))}
+            {courseDurations.length === 0 && (
+              <Text style={{ fontFamily: fonts.sans, color: colors.ink500 }}>No classes found.</Text>
+            )}
+          </ScrollView>
+        </View>
+
+        <View>
+          <Eyebrow>2. Generate Report</Eyebrow>
+          <Card style={{ padding: 0, overflow: 'hidden', marginTop: space.sm }}>
+            <View style={{ flexDirection: 'row', backgroundColor: colors.surfaceAlt, padding: space.md, borderBottomWidth: hairline, borderColor: colors.border }}>
+              <Text style={{ flex: 1, fontFamily: fonts.sansMedium, color: colors.ink900 }}>Report Type</Text>
+              <Text style={{ width: 150, fontFamily: fonts.sansMedium, color: colors.ink900, textAlign: 'right' }}>Action</Text>
+            </View>
+            {teacherReports.map((tr, i) => (
+              <View key={tr.id} style={{ flexDirection: 'row', alignItems: 'center', padding: space.md, borderBottomWidth: i < teacherReports.length - 1 ? hairline : 0, borderColor: colors.border }}>
+                <Text style={{ flex: 1, fontFamily: fonts.sans, fontSize: 13, color: colors.ink900 }}>
+                  {tr.title}
+                </Text>
+                <TouchableOpacity onPress={() => handleTeacherReport(tr.id)} style={{ width: 150, alignItems: 'flex-end' }}>
+                  <Text style={{ fontFamily: fonts.sansMedium, fontSize: 12, color: tr.color }}>
+                    {tr.actionText}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </Card>
+        </View>
+    </>
+  );
+
+  if (role === 'student') {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontFamily: fonts.sansMedium, color: colors.ink500 }}>Access Denied</Text>
+      </View>
+    );
+  }
 
   if (role === 'teacher') {
     return (
-      <ScrollView style={{ flex: 1, backgroundColor: colors.surfaceAlt }} contentContainerStyle={{ paddingTop: insets.top + space.lg, paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: space.lg }}>
+      <ScrollView style={{ flex: 1, backgroundColor: colors.surfaceAlt }} contentContainerStyle={[{ paddingTop: insets.top + space.lg, paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: space.lg }, isDesktop && { maxWidth: 720, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32 }]}>
         <View>
           <Eyebrow>Faculty Reports</Eyebrow>
-          <Text style={styles.h1}>Marks & Attendance</Text>
+          <Text style={styles.h1}>Downloads & Exports</Text>
         </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
-          {courses.map(c => (
-            <TouchableOpacity key={c.id} onPress={() => setSelectedCourse(c.id)} style={[styles.tabBtn, selectedCourse === c.id && styles.tabBtnActive]}>
-              <Text style={[styles.tabBtnText, selectedCourse === c.id && styles.tabBtnTextActive]}>{c.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <Card>
-          <View style={styles.tableHeader}>
-            <Text style={[styles.cell, { flex: 2 }]}>Student</Text>
-            <Text style={[styles.cell, { flex: 1, textAlign: 'center' }]}>Att %</Text>
-            {Array.from({ length: settings.totalSeriesExams }).map((_, i) => (
-              <Text key={i} style={[styles.cell, { flex: 1, textAlign: 'center' }]}>S{i + 1}</Text>
-            ))}
-          </View>
-          {loading ? <ActivityIndicator style={{ margin: space.xl }} color={colors.blue600} /> : (
-            students.map((s, idx) => {
-              // Mock attendance for demo based on index
-              const att = [82, 95, 76, 68, 88, 91, 74][idx % 7];
-              return (
-                <View key={s.id} style={styles.tableRow}>
-                  <View style={{ flex: 2 }}>
-                    <Text style={styles.cellName}>{s.name}</Text>
-                    <Text style={styles.cellReg}>{s.reg ?? '—'}</Text>
-                  </View>
-                  <Text style={[styles.cell, { flex: 1, textAlign: 'center', color: att < 75 ? colors.coral600 : colors.ink900 }]}>{att}%</Text>
-                  {Array.from({ length: settings.totalSeriesExams }).map((_, i) => {
-                    const mk = marks.find(m => m.studentId === s.userId && m.seriesNumber === i + 1);
-                    return <Text key={i} style={[styles.cell, { flex: 1, textAlign: 'center' }]}>{mk ? `${mk.marksObtained}/${mk.maxMarks}` : '—'}</Text>;
-                  })}
-                </View>
-              );
-            })
-          )}
-        </Card>
+        {ReportGenerator}
       </ScrollView>
     );
   }
 
   // Admin View
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.surfaceAlt }} contentContainerStyle={{ paddingTop: insets.top + space.lg, paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: space.lg }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.surfaceAlt }} contentContainerStyle={[{ paddingTop: insets.top + space.lg, paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: space.lg }, isDesktop && { maxWidth: 720, alignSelf: 'center' as const, width: '100%', paddingHorizontal: 32 }]}>
       <View>
         <Eyebrow>College of Engineering Kottarakkara</Eyebrow>
         <Text style={styles.h1}>Reports</Text>
       </View>
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
-        {exports.map(e => (
-          <View key={e.label} style={[styles.exportCard, { backgroundColor: e.bg, borderWidth: e.bordered ? 0.5 : 0, borderColor: colors.border }]}>
-            <Text style={[styles.exportIcon, { color: e.fg }]}>↓</Text>
-            <Text style={[styles.exportLabel, { color: e.fg }]}>{e.label}</Text>
-            <Text style={[styles.exportSub, { color: e.fg, opacity: 0.75 }]}>{e.sub}</Text>
-          </View>
-        ))}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+         <Eyebrow>Global Department Attendance</Eyebrow>
+         <TouchableOpacity onPress={handleExport} style={styles.saveBtn}>
+           <Text style={{ color: '#fff', fontSize: 12, fontFamily: fonts.sansMedium }}>Download CSV</Text>
+         </TouchableOpacity>
       </View>
       
+      {ReportGenerator}
+
       <View>
         <Eyebrow>Global Settings</Eyebrow>
         <View style={{ height: space.sm }} />
